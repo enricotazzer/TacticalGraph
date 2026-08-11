@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tacticalgraph"
+version = "0.1.0"
+description = "Football tactical analysis with GNN, Transformer and RL on Serie A event data"
+requires-python = ">=3.9,<3.13"   # upper bound comes from socceraction
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Install in editable mode so scripts and notebooks import `tacticalgraph` without
+# PYTHONPATH gymnastics:
+#     python -m pip install -e .
+# NOTE on this machine a system Python 3.13 pip shadows the conda env on PATH -- always
+# use `python -m pip`, never bare `pip`.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::FutureWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

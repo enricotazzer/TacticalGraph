@@ -1,0 +1,38 @@
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
+
+# Bulk data lives under DATA_ROOT (external drive), never in the repo. These entries only
+# guard against an accidental local DATA_ROOT.
+#
+# Every pattern is anchored with a leading slash. Without it, `data/` and `models/` also
+# match src/tacticalgraph/data/ and src/tacticalgraph/models/ -- silently excluding the
+# project's own source code from version control.
+/data/
+/raw/
+/spadl/
+/enrichment/
+/networks/
+/models/
+/figures/
+/reports/
+*.parquet
+*.zip
+wandb/
+
+# ...but demo_data/ IS the shipped demo bundle and must be committed. Without these
+# negations the global *.parquet rule above excludes the entire bundle silently, which is
+# exactly how 13 source files went missing earlier when `data/` and `models/` were unanchored.
+!demo_data/
+!demo_data/**/*.parquet
+!demo_data/**/*.pt
+!demo_data/**/*.json
+
+# macOS / exFAT sidecars
+.DS_Store
+._*
