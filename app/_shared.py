@@ -114,8 +114,35 @@ def status_banner(phase_number: int) -> None:
         )
 
 
+@st.cache_data(show_spinner=False)
+def _team_names_from_bundle() -> dict[tuple[str, int], str]:
+    """(provider, team_id) -> name from the bundle's teams table, if it carries one.
+
+    The app reads the exported bundle rather than DATA_ROOT, so it cannot call
+    `aliases.club_labeller` (which needs a `Paths`). Same resolution order, different source.
+    Keyed by provider because the two providers number teams independently.
+    """
+    try:
+        teams = table("teams.parquet")
+    except Exception:  # noqa: BLE001 - older bundles predate the teams table
+        return {}
+    return {
+        (str(r.provider), int(r.team_id)): str(r.team_name)
+        for r in teams.itertuples(index=False)
+    }
+
+
 def club_label(provider: str, team_id: int) -> str:
-    key = team_id_to_club(provider).get(int(team_id))
+    """Display name for a team, corpus-agnostic.
+
+    Prefers the bundle's own teams table so a non-Serie-A corpus gets real names; falls back
+    to the hand-maintained alias table, which only covers the two Serie A providers.
+    """
+    team_id = int(team_id)
+    name = _team_names_from_bundle().get((str(provider), team_id))
+    if name:
+        return name
+    key = team_id_to_club(provider).get(team_id)
     return CLUB_DISPLAY.get(key, f"team {team_id}") if key else f"team {team_id}"
 
 

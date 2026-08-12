@@ -27,7 +27,12 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from tacticalgraph.config import SERIE_A_STATSBOMB, SERIE_A_WYSCOUT
+from tacticalgraph.config import (
+    CORPORA,
+    DEFAULT_CORPUS,
+    SERIE_A_STATSBOMB,
+    SERIE_A_WYSCOUT,
+)
 
 log = logging.getLogger(__name__)
 
@@ -79,17 +84,57 @@ def _matchweek_column(games: pd.DataFrame) -> str:
 
 
 def temporal_split(
-    games: pd.DataFrame, kind: str = "cross_season", train_max_week: int = TRAIN_MATCHWEEK_MAX
+    games: pd.DataFrame,
+    kind: str = "cross_season",
+    train_max_week: int = TRAIN_MATCHWEEK_MAX,
+    corpus: str = DEFAULT_CORPUS,
 ) -> Split:
     """Build a chronological split.
 
     kind="cross_season"  -- train/val on 2015/16, test on 2017/18. The headline split.
     kind="within_season" -- train/val/test all inside 2015/16, single provider. The control
                             that isolates model quality from the provider shift.
+    kind="matchweek"     -- one complete single-provider season split by matchweek. Used by
+                            the Premier League corpus, where there is no second season and
+                            therefore no provider confound to control for.
+
+    `corpus` is validated against `CorpusSpec.split_kinds`: asking for a cross-season split
+    on a single-season corpus would otherwise return silently empty folds, which reads as a
+    successful run that trained on nothing.
     """
+    spec = CORPORA.get(corpus)
+    if spec is None:
+        raise ValueError(f"unknown corpus {corpus!r}; known: {sorted(CORPORA)}")
+    if kind not in spec.split_kinds:
+        raise ValueError(
+            f"corpus {corpus!r} ({spec.label}) does not support split kind {kind!r}; "
+            f"it supports {list(spec.split_kinds)}. "
+            f"{'A single-season corpus has no cross-season split.' if len(spec.seasons) == 1 else ''}"
+        )
+
     week = _matchweek_column(games)
     games = games.copy()
     games[week] = pd.to_numeric(games[week], errors="coerce")
+
+    if kind == "matchweek":
+        season = spec.seasons[0]
+        only = games[games["season"] == season.key]
+        if only.empty:
+            raise ValueError(
+                f"no games for season {season.key!r} in the supplied frame; "
+                f"have {sorted(games['season'].unique())}"
+            )
+        train = set(only.loc[only[week] <= 26, "game_id"].astype(int))
+        val = set(only.loc[only[week].between(27, 33), "game_id"].astype(int))
+        test = set(only.loc[only[week] >= 34, "game_id"].astype(int))
+        description = (
+            f"{spec.label}: train=wk1-26, val=wk27-33, test=wk34-38 -- single provider, "
+            "single season, no provider confound"
+        )
+        split = Split(name=kind, train=train, val=val, test=test, description=description)
+        assert_no_overlap(split)
+        log.info(split.summary())
+        return split
 
     left = games[games["season"] == SERIE_A_STATSBOMB.key]
     right = games[games["season"] == SERIE_A_WYSCOUT.key]

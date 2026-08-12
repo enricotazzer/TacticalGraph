@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pandas as pd  # noqa: E402
 
-from tacticalgraph.config import SERIE_A_STATSBOMB, SERIE_A_WYSCOUT, Paths  # noqa: E402
+from tacticalgraph.config import CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402, SERIE_A_STATSBOMB, SERIE_A_WYSCOUT  # noqa: E402
 from tacticalgraph.data.aliases import (  # noqa: E402
     CLUB_DISPLAY,
     club_to_team_id,
@@ -76,12 +76,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matches", type=int, default=3, help="matches per provider")
     parser.add_argument("--clubs", type=int, default=4, help="clubs in the comparison")
+    parser.add_argument(
+        "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
+        help="which competition corpus to use (default: %(default)s)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)-7s | %(message)s", datefmt="%H:%M:%S"
     )
-    paths = Paths.load().ensure()
+    paths = Paths.load(args.corpus).ensure()
     games = read_games(paths)
 
     for season, provider in (

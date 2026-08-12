@@ -18,6 +18,8 @@ Frosinone, Carpi, Palermo) and 4 promoted for 2017/18 (Cagliari, Crotone, SPAL, 
 
 from __future__ import annotations
 
+from typing import Callable
+
 import logging
 import re
 import unicodedata
@@ -109,6 +111,39 @@ def club_to_team_id(provider: str) -> dict[str, int]:
         for key, ids in CLUB_IDS.items()
         if ids.get(provider) is not None
     }
+
+
+def club_labeller(paths) -> "Callable[[str, int], str]":
+    """Build a `(provider, team_id) -> display name` function for one corpus.
+
+    Resolution order, and why:
+
+    1. The corpus's own `teams.parquet`, written by `build_spadl` from the provider's own
+       names. This covers any competition without hand-maintained data.
+    2. `CLUB_IDS` / `CLUB_DISPLAY`, the hand-maintained table below. It exists *only* to
+       reconcile StatsBomb team ids with Wyscout ones for Serie A, so it does not cover other
+       competitions -- a Premier League id looked up there would silently fall through to
+       "team 39".
+    3. `team {id}`, so a missing name degrades a label rather than raising in a figure.
+
+    Taking `paths` (not a corpus slug) keeps this usable from the app, which already holds a
+    `Paths`, without another import of the config registry.
+    """
+    from tacticalgraph.data.spadl_store import team_name_lookup
+
+    by_id = team_name_lookup(paths)
+
+    def label(provider: str, team_id: int) -> str:
+        team_id = int(team_id)
+        name = by_id.get((str(provider), team_id))
+        if name:
+            return name
+        key = team_id_to_club(provider).get(team_id)
+        if key:
+            return CLUB_DISPLAY.get(key, f"team {team_id}")
+        return f"team {team_id}"
+
+    return label
 
 
 def add_club_key(frame: pd.DataFrame, provider_column: str = "provider") -> pd.DataFrame:

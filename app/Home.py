@@ -14,10 +14,23 @@ st.set_page_config(page_title="TacticalGraph", page_icon="⚽", layout="wide")
 
 page_header(
     "⚽ TacticalGraph",
-    "Football tactical analysis on Serie A event data — graph neural networks, sequence "
-    "models and reinforcement learning, sized to train inside Kaggle's free tier.",
+    "Football tactical analysis on event data — graph neural networks, sequence models and "
+    "reinforcement learning, sized to train inside Kaggle's free tier.",
 )
 sidebar_provenance()
+
+# Which competition this bundle holds, stated before any number is shown. Two corpora in this
+# project share a season key *and* a provider (Serie A 2015/16 and Premier League 2015/16 are
+# both statsbomb/2015-2016), so an unlabelled page would be genuinely ambiguous.
+st.info(
+    f"**This demo shows the `{get_bundle().manifest.get('corpus', 'serie_a')}` corpus — "
+    f"{get_bundle().corpus_label()}.** The project runs Modules 1–4 on two corpora: the "
+    "**Premier League 2015/16** (380 matches, one provider, split by matchweek) is the primary "
+    "one because it has no provider confound, and **Serie A 2015/16 + 2017/18** (760 matches, "
+    "two providers) is kept as a cross-provider generalisation study. The Serie A bundle is "
+    "the one committed here because it is the only one that can drive the harmonisation page; "
+    "the Premier League numbers are in the README."
+)
 
 # --------------------------------------------------------------------------------- status
 st.subheader("What is built")

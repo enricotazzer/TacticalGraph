@@ -122,13 +122,22 @@ def _download_json(url: str, dest: Path, force: bool = False) -> bool:
 # --------------------------------------------------------------------------------------
 
 
-def download_statsbomb_matches(paths: Paths, force: bool = False) -> list[dict[str, Any]]:
-    """Fetch the Serie A 2015/16 match index plus the competition index.
+def download_statsbomb_matches(
+    paths: Paths,
+    force: bool = False,
+    competition_id: int = STATSBOMB_COMPETITION_ID,
+    season_id: int = STATSBOMB_SEASON_ID,
+) -> list[dict[str, Any]]:
+    """Fetch one competition-season's match index plus the competition index.
 
     The on-disk layout deliberately mirrors what `socceraction`'s `StatsBombLoader`
     expects in local mode (`competitions.json`, `matches/{comp}/{season}.json`,
     `events/{game}.json`, `lineups/{game}.json`), so we can reuse the official loader and
     converter instead of hand-parsing StatsBomb JSON.
+
+    `events/` and `lineups/` are keyed by globally unique match id, so several
+    competition-seasons coexist in one raw cache without collision -- which is why `raw/`
+    sits outside the per-corpus namespace.
     """
     _download_json(
         f"{STATSBOMB_BASE_URL}/competitions.json",
@@ -136,30 +145,33 @@ def download_statsbomb_matches(paths: Paths, force: bool = False) -> list[dict[s
         force=force,
     )
 
-    dest = (
-        paths.raw_statsbomb
-        / "matches"
-        / str(STATSBOMB_COMPETITION_ID)
-        / f"{STATSBOMB_SEASON_ID}.json"
-    )
-    url = (
-        f"{STATSBOMB_BASE_URL}/matches/"
-        f"{STATSBOMB_COMPETITION_ID}/{STATSBOMB_SEASON_ID}.json"
-    )
+    dest = paths.raw_statsbomb / "matches" / str(competition_id) / f"{season_id}.json"
+    url = f"{STATSBOMB_BASE_URL}/matches/{competition_id}/{season_id}.json"
     _download_json(url, dest, force=force)
     matches: list[dict[str, Any]] = json.loads(dest.read_text())
-    log.info("StatsBomb match index: %d matches", len(matches))
+    log.info(
+        "StatsBomb match index (comp %s season %s): %d matches",
+        competition_id,
+        season_id,
+        len(matches),
+    )
     return matches
 
 
 def download_statsbomb_season(
-    paths: Paths, force: bool = False, limit: int | None = None
+    paths: Paths,
+    force: bool = False,
+    limit: int | None = None,
+    competition_id: int = STATSBOMB_COMPETITION_ID,
+    season_id: int = STATSBOMB_SEASON_ID,
 ) -> dict[str, int]:
-    """Fetch events + lineups for every Serie A 2015/16 match.
+    """Fetch events + lineups for every match of one competition-season.
 
     ~380 matches x (3 MB events + small lineup). Resumable; safe to re-run.
     """
-    matches = download_statsbomb_matches(paths, force=force)
+    matches = download_statsbomb_matches(
+        paths, force=force, competition_id=competition_id, season_id=season_id
+    )
     match_ids = [m["match_id"] for m in matches]
     if limit is not None:
         # Chronological, so a --limit subset is a prefix of the season rather than an

@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pandas as pd  # noqa: E402
 
-from tacticalgraph.config import Paths  # noqa: E402
+from tacticalgraph.config import CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402
 from tacticalgraph.data.players import build_player_directory  # noqa: E402
 from tacticalgraph.data.spadl_store import read_actions  # noqa: E402
 from tacticalgraph.graphs.passing_network import (  # noqa: E402
@@ -44,6 +44,10 @@ def main() -> int:
     parser.add_argument("--full-only", action="store_true")
     parser.add_argument("--windowed-only", action="store_true")
     parser.add_argument("--min-minutes", type=float, default=DEFAULT_MIN_MINUTES)
+    parser.add_argument(
+        "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
+        help="which competition corpus to use (default: %(default)s)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -52,7 +56,7 @@ def main() -> int:
     if not (args.all or args.full_only or args.windowed_only):
         args.all = True
 
-    paths = Paths.load().ensure()
+    paths = Paths.load(args.corpus).ensure()
     actions = read_actions(paths)
     log.info("loaded %d actions / %d games", len(actions), actions["game_id"].nunique())
 

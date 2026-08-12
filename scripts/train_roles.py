@@ -25,7 +25,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import torch  # noqa: E402
 
-from tacticalgraph.config import Paths  # noqa: E402
+from tacticalgraph.config import ALL_SPLIT_KINDS, CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402
 from tacticalgraph.data.aliases import match_players  # noqa: E402
 from tacticalgraph.data.enrichment import load_enrichment  # noqa: E402
 from tacticalgraph.data.players import load_player_directory  # noqa: E402
@@ -36,6 +36,7 @@ from tacticalgraph.eval.clustering import (  # noqa: E402
     cluster_and_score,
     compare_representations,
     cross_season_stability,
+    half_season_stability,
     within_player_consistency,
 )
 from tacticalgraph.eval.resources import ResourceMonitor, device_label  # noqa: E402
@@ -159,21 +160,32 @@ def run_ablation(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--split", choices=("cross_season", "within_season"), default="cross_season")
+    parser.add_argument(
+        "--split", choices=ALL_SPLIT_KINDS, default=None,
+        help="split kind; defaults to the corpus's primary kind",
+    )
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cpu", help="cpu | mps | cuda")
+    parser.add_argument(
+        "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
+        help="which competition corpus to use (default: %(default)s)",
+    )
     args = parser.parse_args()
+    # Resolve after parsing so the default follows --corpus: "cross_season" is
+    # meaningless for a single-season corpus.
+    if args.split is None:
+        args.split = CORPORA[args.corpus].split_kinds[0]
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)-7s | %(message)s", datefmt="%H:%M:%S"
     )
-    paths = Paths.load().ensure()
+    paths = Paths.load(args.corpus).ensure()
     log.info("device: %s (requested %s)", device_label(), args.device)
 
     features, edges = load_features(paths)
     games = read_games(paths)
-    split = temporal_split(games, kind=args.split)
+    split = temporal_split(games, kind=args.split, corpus=args.corpus)
 
     features["fold"] = split.assign(features["game_id"])
     # Prove no match straddles two folds. With ~13 rows per match, a random split would be
@@ -274,26 +286,55 @@ def main() -> int:
     print("## Within-player consistency (same player, different matches)")
     print(consistency_frame.to_string(index=False))
 
-    directory = load_player_directory(paths)
-    pairs = match_players(
-        directory[directory["provider"] == "statsbomb"],
-        directory[directory["provider"] == "wyscout"],
-        sb_name_col="player_name",
-        wy_name_col="player_name",
-    )
-    stability = [
-        cross_season_stability(baseline_matrix, joined, pairs, label="centrality (baseline)")
-    ]
-    for feature_set, payload in results.items():
-        stability.append(
-            cross_season_stability(
-                payload["all_embedding"], features, pairs, label=f"gnn-{feature_set}"
-            )
+    # A two-provider corpus can compare seasons; a single-season one compares the two halves
+    # of its own season instead. The latter is the cleaner measure -- no provider change to
+    # confound it -- so the corpus picks the check rather than one being skipped as "n/a".
+    multi_provider = len(paths.spec.seasons) > 1
+    if multi_provider:
+        directory = load_player_directory(paths)
+        pairs = match_players(
+            directory[directory["provider"] == "statsbomb"],
+            directory[directory["provider"] == "wyscout"],
+            sb_name_col="player_name",
+            wy_name_col="player_name",
         )
+        stability = [
+            cross_season_stability(
+                baseline_matrix, joined, pairs, label="centrality (baseline)"
+            )
+        ]
+        for feature_set, payload in results.items():
+            stability.append(
+                cross_season_stability(
+                    payload["all_embedding"], features, pairs, label=f"gnn-{feature_set}"
+                )
+            )
+        heading = "## Cross-season stability (2015/16 StatsBomb vs 2017/18 Wyscout)"
+        caveat = "   NB: conflates role stability with provider robustness -- see README"
+        stability_kind = "cross_season"
+    else:
+        stability = [
+            half_season_stability(
+                baseline_matrix, joined, games, label="centrality (baseline)"
+            )
+        ]
+        for feature_set, payload in results.items():
+            stability.append(
+                half_season_stability(
+                    payload["all_embedding"], features, games, label=f"gnn-{feature_set}"
+                )
+            )
+        heading = f"## Half-season stability ({paths.spec.label}, wk1-19 vs wk20-38)"
+        caveat = (
+            "   One provider, one competition: a low score is the representation's fault, "
+            "not a provider change's"
+        )
+        stability_kind = "half_season"
+
     stability_frame = pd.DataFrame(stability)
     print()
-    print("## Cross-season stability (2015/16 StatsBomb vs 2017/18 Wyscout)")
-    print("   NB: conflates role stability with provider robustness -- see README")
+    print(heading)
+    print(caveat)
     print(stability_frame.to_string(index=False))
 
     # ------------------------------------------------------------- persistence
@@ -303,7 +344,8 @@ def main() -> int:
         "feature_sets": {k: list(v) for k, v in FEATURE_SETS.items()},
         "clustering": comparison.to_dict(orient="records"),
         "within_player_consistency": consistency_frame.to_dict(orient="records"),
-        "cross_season_stability": stability_frame.to_dict(orient="records"),
+        "stability_kind": stability_kind,
+        "stability": stability_frame.to_dict(orient="records"),
         "resources": [r["metrics"]["resources"] for r in results.values()],
     }
     dest = paths.reports / f"module2_roles_{args.split}_seed{args.seed}.json"

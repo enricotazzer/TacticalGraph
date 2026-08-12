@@ -144,6 +144,81 @@ def within_player_consistency(
     }
 
 
+def half_season_stability(
+    features: np.ndarray,
+    meta: pd.DataFrame,
+    games: pd.DataFrame,
+    label: str = "",
+    seed: int = 0,
+    split_week: int = 20,
+) -> dict[str, float]:
+    """Similarity of a player's mean embedding between the two halves of one season.
+
+    The single-season analogue of `cross_season_stability`, and a strictly cleaner measure of
+    the same thing: because both halves come from one provider and one competition, a low
+    score means the *representation* is unstable, with no provider change to blame it on. The
+    cross-season version cannot separate those two causes and says so.
+
+    Players must appear in both halves to be counted, which excludes January arrivals and
+    departures -- their absence is a transfer-window artefact, not instability.
+    """
+    matrix = StandardScaler().fit_transform(np.nan_to_num(features, nan=0.0))
+    frame = meta.reset_index(drop=True)
+
+    week = _matchweek_lookup(games)
+    halves = frame["game_id"].astype("int64").map(week)
+    first = frame.index[(halves < split_week).to_numpy(na_value=False)]
+    second = frame.index[(halves >= split_week).to_numpy(na_value=False)]
+
+    def _centroids(index: pd.Index) -> dict[int, np.ndarray]:
+        subset = frame.loc[index]
+        return {
+            int(player_id): matrix[group.index.to_numpy()].mean(axis=0)
+            for player_id, group in subset.groupby("player_id")
+        }
+
+    left_map, right_map = _centroids(first), _centroids(second)
+    shared = sorted(set(left_map) & set(right_map))
+    if not shared:
+        return {"representation": label, "n_players": 0}
+
+    left_stack = np.vstack([left_map[p] for p in shared])
+    right_stack = np.vstack([right_map[p] for p in shared])
+
+    matched = _cosine_rows(left_stack, right_stack)
+    rng = np.random.default_rng(seed)
+    shuffled = _cosine_rows(left_stack, right_stack[rng.permutation(len(shared))])
+
+    return {
+        "representation": label,
+        "n_players": len(shared),
+        "matched_cosine": round(float(matched.mean()), 4),
+        "shuffled_cosine": round(float(shuffled.mean()), 4),
+        "lift": round(float(matched.mean() - shuffled.mean()), 4),
+    }
+
+
+def _matchweek_lookup(games: pd.DataFrame) -> pd.Series:
+    for candidate in ("game_day", "match_week", "matchweek"):
+        if candidate in games.columns:
+            return pd.Series(
+                pd.to_numeric(games[candidate], errors="coerce").to_numpy(),
+                index=games["game_id"].astype("int64").to_numpy(),
+            )
+    raise KeyError(
+        f"no matchweek column in games frame (have {list(games.columns)}); "
+        "half-season stability needs one"
+    )
+
+
+def _cosine_rows(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    na = np.linalg.norm(a, axis=1)
+    nb = np.linalg.norm(b, axis=1)
+    na[na < 1e-9] = 1.0
+    nb[nb < 1e-9] = 1.0
+    return np.sum(a * b, axis=1) / (na * nb)
+
+
 def cross_season_stability(
     features: np.ndarray,
     meta: pd.DataFrame,

@@ -20,8 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pandas as pd  # noqa: E402
 
-from tacticalgraph.config import Paths  # noqa: E402
-from tacticalgraph.data.aliases import CLUB_DISPLAY, team_id_to_club  # noqa: E402
+from tacticalgraph.config import CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402
+from tacticalgraph.data.aliases import club_labeller  # noqa: E402
 from tacticalgraph.data.players import load_player_directory  # noqa: E402
 from tacticalgraph.eval.resources import ResourceMonitor  # noqa: E402
 from tacticalgraph.features.centrality import (  # noqa: E402
@@ -62,12 +62,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--min-matches", type=int, default=5)
     parser.add_argument("--top", type=int, default=15)
+    parser.add_argument(
+        "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
+        help="which competition corpus to use (default: %(default)s)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)-7s | %(message)s", datefmt="%H:%M:%S"
     )
-    paths = Paths.load().ensure()
+    paths = Paths.load(args.corpus).ensure()
 
     networks = networks_from_store(paths, "full")
     log.info("rehydrated %d team-match networks", len(networks))
@@ -96,7 +100,8 @@ def main() -> int:
     print(f"min {args.min_matches} matches; classical baseline for Module 2")
     print("=" * 78)
     for season, frame in named.groupby("season"):
-        print(f"\n## Serie A {season}")
+        # Competition comes from the corpus: two corpora share the season key 2015-2016.
+        print(f"\n## {paths.spec.label.rsplit(' ', 1)[0]} {season}")
         top = frame.nlargest(args.top, "pagerank")
         print(
             top[
@@ -115,11 +120,10 @@ def main() -> int:
 
     print()
     print("## Team structure by season (mean over team-matches)")
-    club_maps = {p: team_id_to_club(p) for p in ("statsbomb", "wyscout")}
+    label = club_labeller(paths)
     teams = teams.copy()
     teams["club"] = [
-        CLUB_DISPLAY.get(club_maps.get(p, {}).get(int(t), ""), str(t))
-        for p, t in zip(teams["provider"], teams["team_id"])
+        label(p, t) for p, t in zip(teams["provider"], teams["team_id"])
     ]
     summary = (
         teams.groupby(["season", "club"])[

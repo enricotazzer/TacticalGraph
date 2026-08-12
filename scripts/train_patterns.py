@@ -26,7 +26,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import torch  # noqa: E402
 
-from tacticalgraph.config import Paths  # noqa: E402
+from tacticalgraph.config import ALL_SPLIT_KINDS, CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402
 from tacticalgraph.data.spadl_store import read_actions, read_games  # noqa: E402
 from tacticalgraph.eval.patterns import (  # noqa: E402
     compare_representations,
@@ -62,22 +62,33 @@ def fit_xthreat(actions: pd.DataFrame, train_game_ids: set[int]) -> pd.Series:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--split", choices=("cross_season", "within_season"), default="cross_season")
+    parser.add_argument(
+        "--split", choices=ALL_SPLIT_KINDS, default=None,
+        help="split kind; defaults to the corpus's primary kind",
+    )
     parser.add_argument("--k", type=int, default=8, help="k for the reported clustering")
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--skip-encoder", action="store_true")
+    parser.add_argument(
+        "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
+        help="which competition corpus to use (default: %(default)s)",
+    )
     args = parser.parse_args()
+    # Resolve after parsing so the default follows --corpus: "cross_season" is
+    # meaningless for a single-season corpus.
+    if args.split is None:
+        args.split = CORPORA[args.corpus].split_kinds[0]
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)-7s | %(message)s", datefmt="%H:%M:%S"
     )
-    paths = Paths.load().ensure()
+    paths = Paths.load(args.corpus).ensure()
 
     games = read_games(paths)
     actions = read_actions(paths)
-    split = temporal_split(games, kind=args.split)
+    split = temporal_split(games, kind=args.split, corpus=args.corpus)
 
     xt = fit_xthreat(actions, split.train)
 

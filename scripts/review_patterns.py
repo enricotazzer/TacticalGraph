@@ -31,8 +31,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from tacticalgraph.config import Paths  # noqa: E402
-from tacticalgraph.data.aliases import CLUB_DISPLAY, team_id_to_club  # noqa: E402
+from tacticalgraph.config import CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402
+from tacticalgraph.data.aliases import club_labeller  # noqa: E402
 from tacticalgraph.data.spadl_store import read_actions, read_games  # noqa: E402
 from tacticalgraph.features.chains import cluster_profiles  # noqa: E402
 from tacticalgraph.viz.pitch import PITCH_KWARGS  # noqa: E402
@@ -40,9 +40,6 @@ from tacticalgraph.viz.pitch import PITCH_KWARGS  # noqa: E402
 log = logging.getLogger("review_patterns")
 
 
-def club(provider: str, team_id: int) -> str:
-    key = team_id_to_club(provider).get(int(team_id))
-    return CLUB_DISPLAY.get(key, f"team {team_id}") if key else f"team {team_id}"
 
 
 def draw_chain(ax, chain_actions: pd.DataFrame, title: str) -> None:
@@ -79,12 +76,17 @@ def main() -> int:
                         help="cluster column suffix, e.g. hand-crafted or gru-autoencoder")
     parser.add_argument("--per-cluster", type=int, default=6)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
+        help="which competition corpus to use (default: %(default)s)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)-7s | %(message)s", datefmt="%H:%M:%S"
     )
-    paths = Paths.load().ensure()
+    paths = Paths.load(args.corpus).ensure()
+    club = club_labeller(paths)
 
     chain_path = paths.models / "module4_chains.parquet"
     if not chain_path.exists():

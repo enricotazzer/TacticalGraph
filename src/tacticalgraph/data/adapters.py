@@ -31,10 +31,8 @@ from socceraction.spadl import statsbomb as statsbomb_spadl
 from socceraction.spadl import wyscout as wyscout_spadl
 
 from tacticalgraph.config import (
-    SERIE_A_STATSBOMB,
-    SERIE_A_WYSCOUT,
-    STATSBOMB_COMPETITION_ID,
-    STATSBOMB_SEASON_ID,
+    CORPORA,
+    DEFAULT_CORPUS,
     Paths,
     SeasonSpec,
 )
@@ -70,36 +68,60 @@ def _wyscout_loader(paths: Paths) -> PublicWyscoutLoader:
     return PublicWyscoutLoader(root=str(paths.raw_wyscout), download=False)
 
 
-BINDINGS: dict[str, ProviderBinding] = {
-    "statsbomb": ProviderBinding(
-        spec=SERIE_A_STATSBOMB,
-        competition_id=STATSBOMB_COMPETITION_ID,
-        season_id=STATSBOMB_SEASON_ID,
-        make_loader=_statsbomb_loader,
-        convert=statsbomb_spadl.convert_to_actions,
-    ),
-    "wyscout": ProviderBinding(
-        spec=SERIE_A_WYSCOUT,
-        competition_id=WYSCOUT_COMPETITION_ID,
-        season_id=WYSCOUT_SEASON_ID,
-        make_loader=_wyscout_loader,
-        convert=wyscout_spadl.convert_to_actions,
-    ),
-}
+def bindings_for(corpus: str = DEFAULT_CORPUS) -> dict[str, ProviderBinding]:
+    """Provider bindings for one corpus.
+
+    Built per corpus rather than as a module constant because the same provider serves
+    different competitions: `statsbomb` means (competition 12, season 27) for Serie A and
+    (competition 2, season 27) for the Premier League. A single global mapping would quietly
+    convert the wrong competition into the right-looking partition.
+    """
+    spec = CORPORA.get(corpus)
+    if spec is None:
+        raise ValueError(f"unknown corpus {corpus!r}; known: {sorted(CORPORA)}")
+
+    out: dict[str, ProviderBinding] = {}
+    statsbomb_seasons = [s for s in spec.seasons if s.provider == "statsbomb"]
+    if statsbomb_seasons:
+        if len(statsbomb_seasons) != len(spec.statsbomb_ids):
+            raise ValueError(
+                f"corpus {corpus!r}: {len(statsbomb_seasons)} StatsBomb season(s) but "
+                f"{len(spec.statsbomb_ids)} id pair(s) -- these must correspond"
+            )
+        competition_id, season_id = spec.statsbomb_ids[0]
+        out["statsbomb"] = ProviderBinding(
+            spec=statsbomb_seasons[0],
+            competition_id=competition_id,
+            season_id=season_id,
+            make_loader=_statsbomb_loader,
+            convert=statsbomb_spadl.convert_to_actions,
+        )
+    wyscout_seasons = [s for s in spec.seasons if s.provider == "wyscout"]
+    if wyscout_seasons:
+        out["wyscout"] = ProviderBinding(
+            spec=wyscout_seasons[0],
+            competition_id=WYSCOUT_COMPETITION_ID,
+            season_id=WYSCOUT_SEASON_ID,
+            make_loader=_wyscout_loader,
+            convert=wyscout_spadl.convert_to_actions,
+        )
+    return out
 
 
-def get_binding(provider: str) -> ProviderBinding:
+def get_binding(provider: str, corpus: str = DEFAULT_CORPUS) -> ProviderBinding:
+    bindings = bindings_for(corpus)
     try:
-        return BINDINGS[provider]
+        return bindings[provider]
     except KeyError:
         raise ValueError(
-            f"unknown provider {provider!r}; expected one of {sorted(BINDINGS)}"
+            f"corpus {corpus!r} has no provider {provider!r}; "
+            f"it has {sorted(bindings)}"
         ) from None
 
 
 def load_games(paths: Paths, provider: str) -> pd.DataFrame:
     """Match index for a provider's season, chronologically ordered."""
-    binding = get_binding(provider)
+    binding = get_binding(provider, paths.corpus)
     loader = binding.make_loader(paths)
     games = loader.games(binding.competition_id, binding.season_id)
     sort_keys = [k for k in ("game_date", "game_day") if k in games.columns]
@@ -119,7 +141,7 @@ def convert_game(
     Returns a frame with SPADL columns plus `type_name`/`result_name`, an inferred
     `recipient_id`, a reconstructed `possession_id`, and season/provider partition keys.
     """
-    binding = get_binding(provider)
+    binding = get_binding(provider, paths.corpus)
     loader = loader or binding.make_loader(paths)
     game_id = int(game["game_id"])
 
@@ -142,7 +164,7 @@ def convert_game(
 
 def team_names(paths: Paths, provider: str) -> pd.DataFrame:
     """Distinct (team_id, team_name) for a season, for the alias table and plots."""
-    binding = get_binding(provider)
+    binding = get_binding(provider, paths.corpus)
     loader = binding.make_loader(paths)
     games = load_games(paths, provider)
     frames = []
@@ -165,7 +187,7 @@ def player_frame(paths: Paths, provider: str) -> pd.DataFrame:
     This is where the two providers differ most and where the harmonisation cost is
     concentrated -- see `roles.py` for how the position vocabularies are reconciled.
     """
-    binding = get_binding(provider)
+    binding = get_binding(provider, paths.corpus)
     loader = binding.make_loader(paths)
     games = load_games(paths, provider)
     frames = []

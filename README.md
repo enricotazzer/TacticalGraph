@@ -1,22 +1,51 @@
 # TacticalGraph
 
-Football tactical analysis on Serie A event data, combining graph neural networks, sequence
-models and reinforcement learning. Every module is benchmarked against an explicit baseline
-and validated quantitatively, and everything is sized to train inside Kaggle's free tier.
+Football tactical analysis on event data, combining graph neural networks, sequence models and
+reinforcement learning. Every module is benchmarked against an explicit baseline and validated
+quantitatively, and everything is sized to train inside Kaggle's free tier.
 
-**Status: Modules 1–4 complete.** Data ingestion and cross-provider harmonisation, passing
-network construction, the classical centrality baseline, GNN functional-role embeddings,
-in-match result prediction (baseline ladder vs GNN+Transformer), and recurring tactical
-pattern discovery. Module 5 (RL pass choice) is blocked on data Serie A does not have;
-Module 6 exists as the demo app. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+**Status: Modules 1–4 complete, on two corpora.** Data ingestion, passing network construction,
+the classical centrality baseline, GNN functional-role embeddings, in-match result prediction
+(baseline ladder vs GNN+Transformer), and recurring tactical pattern discovery. Module 5 (RL
+pass choice) is blocked on 360 data neither corpus has; Module 6 exists as the demo app. See
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## Two corpora, and why
+
+| Corpus | Matches | Provider(s) | Split | Role |
+|---|---|---|---|---|
+| **`premier_league`** | 380 | StatsBomb | matchweek 1-26 / 27-33 / 34-38 | **Primary.** One complete season, one provider — no confound. |
+| `serie_a` | 760 | StatsBomb 2015/16 + Wyscout 2017/18 | cross_season / within_season | Cross-**provider** generalisation study. |
+
+The project began on Serie A because that is what the brief asked for, and hit a hard limit:
+StatsBomb open data contains exactly one usable Serie A season, so a second season had to come
+from Wyscout. That makes the season change *and* the provider change the same event — a drop on
+the test fold cannot be attributed to either. The Premier League 2015/16 season is complete
+(380 matches, 38 matchweeks × 10) from a single provider, so the split is by matchweek and a
+drop is the model's fault.
+
+Serie A was not discarded. The harmonisation work is a real result, and it now answers the
+question it can answer cleanly: does a model trained on one provider transfer to another?
+
+Both corpora coexist: derived data is namespaced under `DATA_ROOT/corpora/<slug>/`, because the
+two share a season key (`2015-2016`) *and* a provider (`statsbomb`) and differ only by
+competition id. `raw/` is shared, since StatsBomb match ids are globally unique (verified: zero
+overlap). Scripts take `--corpus`; `temporal_split` validates the split kind against the corpus,
+so asking for `cross_season` on a single-season corpus raises instead of returning empty folds.
+
+**Tracking data is out of scope**, and that is a limitation rather than an oversight — no open
+tracking exists at league-season scale, and 360 freeze-frames are anonymous and show a mean of
+14.9 of 22 players. What this makes impossible is stated explicitly in
+[`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md), along with the one dataset worth revisiting
+(PFF FC's World Cup 2022 release: 64 matches, 30 fps, identified players).
 
 Two of the four headline findings are negative, and they are reported as prominently as the
 positive ones:
 
 | Module | Finding |
 |---|---|
-| 2 | The GNN embedding beats classical centrality **10×** on role alignment — but passing topology adds only ~1.1–1.5 pp over pitch position, so most recoverable signal is spatial. |
-| 3 | **B1 (scoreline + aggregates + xT) is the best model.** The GNN+Transformer is *significantly worse than B0* in all 6 runs: 300 independent training labels cannot support it. |
+| 2 | The GNN embedding beats classical centrality **~10×** on role alignment — but passing topology adds only **+0.73 pp** (Premier League) to **+1.07 pp** (Serie A control) over pitch position, and on the Premier League corpus it *hurts* clustering. Most recoverable signal is spatial. |
+| 3 | **B1 (scoreline + aggregates + xT) is the best model.** The GNN+Transformer is *significantly worse than B0* in all 6 Serie A runs: 300 independent training labels cannot support it. |
 | 4 | Clustering finds possession patterns with a **56–68% shot rate against a 12.4% base** — and the interpretable baseline beats the learned encoder at every k. |
 
 ---
@@ -70,17 +99,23 @@ The only open route to a second season is the **Wyscout public dataset**
 (Pappalardo et al. 2019, figshare collection `4415000`), which includes *Italian first
 division 2017/18*, 380 matches. So the corpus is deliberately two-provider:
 
-| Season | Provider | Matches | Actions | Actions/match |
-|---|---|---|---|---|
-| Serie A 2015/16 | StatsBomb | 380 | 761,745 | 2,004.6 |
-| Serie A 2017/18 | Wyscout | 380 | 495,873 | 1,304.9 |
-| **Total** | | **760** | **1,257,618** | |
+| Corpus | Season | Provider | Matches | Actions | Actions/match |
+|---|---|---|---|---|---|
+| `serie_a` | Serie A 2015/16 | StatsBomb | 380 | 761,745 | 2,004.6 |
+| `serie_a` | Serie A 2017/18 | Wyscout | 380 | 495,873 | 1,304.9 |
+| `premier_league` | Premier League 2015/16 | StatsBomb | 380 | 758,434 | 1,995.9 |
+| **Total** | | | **1,140** | **2,016,052** | |
 
-This buys the strongest available anti-leakage split — train on one season, test on a
-*later* one — at the cost of confounding the season change with a provider change. That
-trade-off was accepted deliberately, so the project's job is to **measure the confound
-rather than hide it**. That is what `scripts/validate_harmonization.py` exists for, and its
-output is reproduced below.
+The Serie A pair buys a cross-*season* split — train on one season, test on a *later* one — at
+the cost of confounding the season change with a provider change. That trade-off was accepted
+deliberately, so the project's job is to **measure the confound rather than hide it**. That is
+what `scripts/validate_harmonization.py` exists for, and its output is reproduced below.
+
+The Premier League corpus was added later, once it became clear the confound was limiting every
+downstream conclusion. It is a **complete 380-match single-provider season** (38 matchweeks × 10,
+`match_week` present on all 380, 0 conversion failures), split by matchweek, so it carries no
+provider effect at all. It has **no 360 data on any of its 380 matches**, which is why it cannot
+host the phase/formation work. Serie A stays as the cross-provider study.
 
 ### Why SPADL rather than a bespoke schema
 
@@ -240,10 +275,15 @@ feature set is therefore split into three variants, and **all three are always r
 
 Test accuracy, 3 seeds, mean ± std:
 
-| Split | `position` | `topology` | `both` | `both − position` |
+| Corpus / split | `position` | `topology` | `both` | `both − position` |
 |---|---|---|---|---|
-| within-season (control, single provider) | 0.8915 ± 0.0062 | 0.7659 ± 0.0045 | **0.9022 ± 0.0007** | **+1.07 pp ± 0.57** |
-| cross-season (confounded) | 0.7769 ± 0.0102 | 0.6777 ± 0.0095 | **0.7916 ± 0.0026** | **+1.47 pp ± 0.98** |
+| **Premier League, matchweek (primary)** | 0.8531 ± 0.0029 | 0.7578 ± 0.0071 | **0.8604 ± 0.0014** | **+0.73 pp ± 0.43** |
+| Serie A, within-season (control) | 0.8915 ± 0.0062 | 0.7659 ± 0.0045 | **0.9022 ± 0.0007** | **+1.07 pp ± 0.57** |
+| Serie A, cross-season (confounded) | 0.7769 ± 0.0102 | 0.6777 ± 0.0095 | **0.7916 ± 0.0026** | **+1.47 pp ± 0.98** |
+
+The headline +1.47 pp is the *confounded* split. Compare the two unconfounded rows instead:
+**+0.73 pp** (Premier League) and **+1.07 pp** (Serie A within-season). Part of the apparent
+cross-season contribution was the provider change, not passing structure.
 
 ### Clustering: the actual comparison against the baseline
 
@@ -260,14 +300,35 @@ fine-grained position **that nothing was trained on**:
 | gnn-position | 12 | 0.240 | 0.422 | 0.219 | **0.340** | **0.498** |
 | gnn-both | 12 | 0.276 | 0.443 | 0.264 | 0.321 | 0.480 |
 
+On the Premier League corpus, mean of 3 seeds at k=4 — and the ordering changes:
+
+| Representation | ARI (4-class) | NMI (4-class) | ARI (fine) | NMI (fine) |
+|---|---|---|---|---|
+| centrality (baseline) | 0.052 | 0.100 | 0.037 | 0.082 |
+| gnn-topology | 0.295 | 0.354 | 0.094 | 0.255 |
+| **gnn-position** | **0.495** | **0.555** | **0.179** | **0.416** |
+| gnn-both | 0.463 | 0.543 | 0.155 | 0.389 |
+
+**`gnn-position` beats `gnn-both` here.** On Serie A, adding topology helped clustering
+(0.516 vs 0.320); on the unconfounded Premier League corpus it *hurts* it (0.463 vs 0.495)
+while still adding +0.73 pp of classification accuracy. So topology's contribution is marginal
+under supervision and slightly negative for unsupervised structure — a stronger version of the
+same negative result, not a contradiction of it.
+
 Stability diagnostics (cosine lift = same-player minus different-player similarity):
 
-| Representation | within-player lift | cross-season lift (n=199) |
-|---|---|---|
-| centrality (baseline) | 0.295 | 0.651 |
-| gnn-topology | 0.419 | 0.728 |
-| gnn-position | 0.581 | 0.762 |
-| **gnn-both** | **0.609** | **0.814** |
+| Representation | within-player lift (Serie A) | cross-season lift (Serie A, n=199) | half-season lift (PL, n=383) |
+|---|---|---|---|
+| centrality (baseline) | 0.295 | 0.651 | 0.692 |
+| gnn-topology | 0.419 | 0.728 | 0.740 |
+| gnn-position | 0.581 | 0.762 | 0.810 |
+| **gnn-both** | **0.609** | **0.814** | **0.835** |
+
+The Premier League column uses `half_season_stability` (weeks 1-19 vs 20-38), the
+single-season replacement for cross-season stability. It is the cleaner measure: one provider
+and one competition, so a low score is the representation's fault with no provider change to
+blame. Players appearing in only one half are excluded — that is a transfer window, not
+instability.
 
 ### What this actually shows — and what it does not
 
@@ -546,16 +607,30 @@ pytest                                       # 74 tests
   action is credited 0 minutes and filtered out of the network.
 - **Role labels are 4-class**, forced by Wyscout. The fine-grained validation signal exists
   for one of the two seasons only.
-- **Serie A has no 360 freeze-frame data in either season.** Module 5's pass-choice RL agent
-  will therefore need a different competition (Euro 2024 is the candidate), which departs
-  from the Serie A framing. Note also that 360 freeze-frames are anonymous and only
-  partially visible (18 of 22 players in a sampled frame; `teammate`/`actor`/`keeper` flags
-  and no player ids), so the action space is position slots, not named players.
+- **Neither corpus has 360 freeze-frame data.** Premier League 2015/16 has 0 of 380 matches;
+  Serie A has none in either season. Module 5's pass-choice RL agent needs a third corpus
+  (World Cup 2022, 64 matches, or Euro 2024, 51), which departs from the league framing. 360 is
+  also anonymous and partially visible — measured on a real match: **mean 14.9 of 22 players,
+  0% of frames with all 22**, only `teammate`/`actor`/`keeper` flags and no player ids — so the
+  action space is position slots, not named players.
+- **No tracking data, and this bounds what the graphs can represent.** No open tracking exists
+  at league-season scale. Consequences, stated precisely: **player-level defensive centrality is
+  not buildable** (360 has no player identity, and out of possession event data records a median
+  of only 3-4 actions per player, with ~5 of 11 players reaching 5); and a **defensive-phase
+  graph is not buildable from events at all**, only team-level scalars such as line height and
+  recovery zones. See [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
+- **Pass-only edges make centrality a volume proxy.** Midfielders are 33% of the population and
+  **84% of the top 50 by degree**; forwards and goalkeepers are effectively unrankable (0-14%
+  against a 24% share). The metrics also disagree with each other about who is central
+  (`degree_total` says 84% MID, `strength_out` says 56% DEF), which is itself evidence that none
+  of them measures tactical importance. Candidate fixes — xT-weighted edges, shot-chain
+  involvement, role-relative z-scores — are specified in [`docs/ROADMAP.md`](docs/ROADMAP.md)
+  and **not yet built**.
 - **Event data is a partial representation of football.** Off-ball movement, verbal
   communication and tactical intent are not observable here, and no amount of modelling
   recovers them.
-- **Reduced scale by design.** Two seasons of one competition, small models, short training
-  schedules. These are proof-of-concept results, not state-of-the-art claims.
+- **Reduced scale by design.** Three competition-seasons across two corpora, small models,
+  short training schedules. These are proof-of-concept results, not state-of-the-art claims.
 - **Three seeds** per configuration. Enough to show the ablation ordering is stable; not
   enough for tight confidence intervals on a ~1 pp effect.
 - **Module 3 is data-limited, not architecture-limited.** 300 independent training matches is

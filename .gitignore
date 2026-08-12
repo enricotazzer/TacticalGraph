@@ -36,3 +36,7 @@ wandb/
 # macOS / exFAT sidecars
 .DS_Store
 ._*
+
+# transient runner written by scripts/check_app_pages.py (removed in a finally block,
+# but a hard crash could leave it behind)
+/.app_page_runner.py

@@ -20,6 +20,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # macOS also writes `._spadl`. They are not parquet and must never reach a reader.
 APPLEDOUBLE_PREFIX = "._"
 
+# Defined before `Paths` because it is a dataclass field default, evaluated at class
+# creation. The registry it indexes (`CORPORA`) is built further down and only read inside
+# methods, so it may be defined later.
+DEFAULT_CORPUS = "serie_a"
+
 
 def _load_dotenv() -> None:
     """Minimal .env loader. Avoids importing python-dotenv just for one variable."""
@@ -69,14 +74,39 @@ def clean_glob(directory: Path, pattern: str) -> list[Path]:
 
 @dataclass(frozen=True)
 class Paths:
-    """Derived layout under DATA_ROOT."""
+    """Derived layout under DATA_ROOT, namespaced by corpus.
+
+    Two competitions can share a provider and a season key -- Serie A 2015/16 and Premier
+    League 2015/16 are both `statsbomb` / `2015-2016`. Partitioning only by season and
+    provider would therefore collide, silently merging two competitions into one table.
+
+    Rather than thread a `competition` column through every table, reader and split, each
+    corpus gets its own subtree and every derived path hangs off it. `raw/` is deliberately
+    *outside* that namespace: StatsBomb event files are keyed by globally unique match id, so
+    two corpora can share one download cache instead of duplicating 1.4 GB.
+    """
 
     root: Path
+    corpus: str = DEFAULT_CORPUS
 
     @classmethod
-    def load(cls) -> "Paths":
-        return cls(root=data_root())
+    def load(cls, corpus: str = DEFAULT_CORPUS) -> "Paths":
+        if corpus not in CORPORA:
+            raise ValueError(
+                f"unknown corpus {corpus!r}; known: {sorted(CORPORA)}"
+            )
+        return cls(root=data_root(), corpus=corpus)
 
+    @property
+    def spec(self) -> "CorpusSpec":
+        return CORPORA[self.corpus]
+
+    @property
+    def derived(self) -> Path:
+        """Everything this project computes, isolated per corpus."""
+        return self.root / "corpora" / self.corpus
+
+    # -- shared across corpora (keyed by globally unique match id) --
     @property
     def raw_statsbomb(self) -> Path:
         return self.root / "raw" / "statsbomb"
@@ -85,30 +115,31 @@ class Paths:
     def raw_wyscout(self) -> Path:
         return self.root / "raw" / "wyscout"
 
+    # -- per corpus --
     @property
     def spadl(self) -> Path:
-        return self.root / "spadl"
+        return self.derived / "spadl"
 
     @property
     def enrichment(self) -> Path:
         """StatsBomb-only fields, quarantined: validation use only, never model input."""
-        return self.root / "enrichment"
+        return self.derived / "enrichment"
 
     @property
     def networks(self) -> Path:
-        return self.root / "networks"
+        return self.derived / "networks"
 
     @property
     def models(self) -> Path:
-        return self.root / "models"
+        return self.derived / "models"
 
     @property
     def figures(self) -> Path:
-        return self.root / "figures"
+        return self.derived / "figures"
 
     @property
     def reports(self) -> Path:
-        return self.root / "reports"
+        return self.derived / "reports"
 
     def ensure(self) -> "Paths":
         for path in (
@@ -158,10 +189,90 @@ SERIE_A_WYSCOUT = SeasonSpec(
 )
 SEASONS: tuple[SeasonSpec, ...] = (SERIE_A_STATSBOMB, SERIE_A_WYSCOUT)
 
-# StatsBomb open-data identifiers for Serie A 2015/16.
+# Premier League 2015/16: a *complete* 380-match season from a single provider. This is the
+# corpus the event-based modules (1-4) belong on, because it removes the confound that limits
+# the Serie A results -- there, the season change and the provider change are the same event,
+# so a drop on the test fold cannot be attributed to either. Here train/val/test are
+# matchweeks of one season logged by one provider, so a drop is the model's fault.
+#
+# It has no 360 data (0 of 380 matches), which is why it cannot host the phase/formation work.
+PREMIER_LEAGUE_2015 = SeasonSpec(
+    key="2015-2016",
+    provider="statsbomb",
+    label="Premier League 2015/2016",
+    n_matches_expected=380,
+)
+
+STATSBOMB_BASE_URL = "https://raw.githubusercontent.com/statsbomb/open-data/master/data"
+
+# StatsBomb open-data identifiers for Serie A 2015/16, kept as module constants for
+# backwards compatibility with the original single-corpus scripts.
 STATSBOMB_COMPETITION_ID = 12
 STATSBOMB_SEASON_ID = 27
-STATSBOMB_BASE_URL = "https://raw.githubusercontent.com/statsbomb/open-data/master/data"
+
+
+@dataclass(frozen=True)
+class CorpusSpec:
+    """A competition-level corpus: its seasons, its provenance, and how it may be split.
+
+    `split_kinds` is authoritative. A single-season corpus has no cross-season split, and
+    asking for one must fail loudly rather than silently return empty folds.
+    """
+
+    slug: str
+    label: str
+    seasons: tuple[SeasonSpec, ...]
+    split_kinds: tuple[str, ...]
+    # StatsBomb (competition_id, season_id) pairs to ingest; empty for non-StatsBomb sources.
+    statsbomb_ids: tuple[tuple[int, int], ...] = ()
+    uses_wyscout: bool = False
+    has_360: bool = False
+    notes: str = ""
+
+    @property
+    def n_matches_expected(self) -> int:
+        return sum(s.n_matches_expected for s in self.seasons)
+
+
+SERIE_A_CORPUS = CorpusSpec(
+    slug="serie_a",
+    label="Serie A 2015/16 + 2017/18",
+    seasons=(SERIE_A_STATSBOMB, SERIE_A_WYSCOUT),
+    split_kinds=("cross_season", "within_season"),
+    statsbomb_ids=((12, 27),),
+    uses_wyscout=True,
+    has_360=False,
+    notes=(
+        "Two providers by necessity: StatsBomb open data has exactly one usable Serie A "
+        "season. Retained as a cross-provider generalisation study."
+    ),
+)
+
+PREMIER_LEAGUE_CORPUS = CorpusSpec(
+    slug="premier_league",
+    label="Premier League 2015/16",
+    seasons=(PREMIER_LEAGUE_2015,),
+    split_kinds=("matchweek",),
+    statsbomb_ids=((2, 27),),
+    uses_wyscout=False,
+    has_360=False,
+    notes=(
+        "Complete 380-match single-provider season. No provider confound; split by "
+        "matchweek. No 360 data on any match."
+    ),
+)
+
+CORPORA: dict[str, CorpusSpec] = {
+    SERIE_A_CORPUS.slug: SERIE_A_CORPUS,
+    PREMIER_LEAGUE_CORPUS.slug: PREMIER_LEAGUE_CORPUS,
+}
+
+# Union of split kinds across all corpora, for `--split` argparse choices. The *valid* set
+# for a given run is narrower and is enforced by `eval.splits.temporal_split` against the
+# corpus spec -- argparse only rejects typos.
+ALL_SPLIT_KINDS: tuple[str, ...] = tuple(
+    dict.fromkeys(k for spec in CORPORA.values() for k in spec.split_kinds)
+)
 
 # Wyscout public dataset (Pappalardo et al. 2019), figshare collection 4415000.
 WYSCOUT_COLLECTION_URL = "https://api.figshare.com/v2/collections/4415000/articles"

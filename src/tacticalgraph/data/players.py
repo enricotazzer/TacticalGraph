@@ -59,9 +59,22 @@ def statsbomb_players(paths: Paths) -> pd.DataFrame:
     frame["coarse_role"] = [
         statsbomb_to_coarse(p, strict=False) for p in frame["position_name_24"]
     ]
-    frame["season"] = SERIE_A_STATSBOMB.key
+    # Season key comes from the corpus, not a Serie A constant: the Premier League corpus is
+    # also provider=statsbomb, so a hardcoded key would tag its players with the wrong
+    # season and silently break every (season, provider, player_id) join.
+    frame["season"] = _season_key(paths, "statsbomb")
     frame["provider"] = "statsbomb"
     return frame
+
+
+def _season_key(paths: Paths, provider: str) -> str:
+    """The corpus's season key for one provider."""
+    for season in paths.spec.seasons:
+        if season.provider == provider:
+            return season.key
+    raise ValueError(
+        f"corpus {paths.corpus!r} ({paths.spec.label}) has no {provider!r} season"
+    )
 
 
 _ESCAPED_UNICODE = re.compile(r"\\u([0-9a-fA-F]{4})")
@@ -98,20 +111,30 @@ def wyscout_players(paths: Paths) -> pd.DataFrame:
         ["player_id", "player_name", "coarse_role"]
     ].copy()
     frame["position_name_24"] = None
-    frame["season"] = SERIE_A_WYSCOUT.key
+    frame["season"] = _season_key(paths, "wyscout")
     frame["provider"] = "wyscout"
     return frame
 
 
 def build_player_directory(paths: Paths, actions: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Concatenate both providers' directories, restricted to players who actually played.
+    """Concatenate the corpus's providers' directories, restricted to players who played.
 
     Wyscout's players.json covers all five European leagues (~3,600 players), so it must be
-    filtered down to those appearing in Serie A actions or the role-label distribution is
-    badly skewed.
+    filtered down to those appearing in this corpus's actions or the role-label distribution
+    is badly skewed.
+
+    Only providers the corpus declares are built. Building Wyscout unconditionally would
+    inject ~3,600 Serie A players into the Premier League directory -- they would carry a
+    season key no PL action has, so nothing would raise; the directory would just be wrong.
     """
-    statsbomb = statsbomb_players(paths)
-    wyscout = wyscout_players(paths)
+    providers = {season.provider for season in paths.spec.seasons}
+    frames = []
+    if "statsbomb" in providers:
+        frames.append(statsbomb_players(paths))
+    if "wyscout" in providers:
+        frames.append(wyscout_players(paths))
+    if not frames:
+        raise ValueError(f"corpus {paths.corpus!r} declares no known provider")
 
     if actions is not None:
         appeared = (
@@ -119,17 +142,14 @@ def build_player_directory(paths: Paths, actions: pd.DataFrame | None = None) ->
             .apply(lambda s: set(s.dropna().astype(int)))
             .to_dict()
         )
-        keep = []
-        for frame in (statsbomb, wyscout):
+        kept = []
+        for frame in frames:
             key = (frame["season"].iloc[0], frame["provider"].iloc[0])
             ids = appeared.get(key)
-            if ids is None:
-                keep.append(frame)
-                continue
-            keep.append(frame[frame["player_id"].astype(int).isin(ids)])
-        statsbomb, wyscout = keep
+            kept.append(frame if ids is None else frame[frame["player_id"].astype(int).isin(ids)])
+        frames = kept
 
-    directory = pd.concat([statsbomb, wyscout], ignore_index=True)
+    directory = pd.concat(frames, ignore_index=True)
     directory["player_id"] = directory["player_id"].astype("int64")
 
     log.info(

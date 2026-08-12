@@ -88,6 +88,53 @@ def read_games(paths: Paths, season: str | None = None) -> pd.DataFrame:
     return games
 
 
+TEAMS_FILENAME = "teams.parquet"
+
+
+def write_teams(paths: Paths, teams: pd.DataFrame) -> Path:
+    """Persist (provider, season, team_id, team_name) for the corpus.
+
+    The hand-maintained alias table in `data.aliases` exists only to reconcile StatsBomb
+    team ids with Wyscout ones for Serie A. A single-provider corpus needs no reconciliation,
+    just the provider's own names -- so read them from the loader once and store them, rather
+    than extending a hardcoded table per competition.
+    """
+    paths.spadl.mkdir(parents=True, exist_ok=True)
+    dest = paths.spadl / TEAMS_FILENAME
+    teams.to_parquet(dest, index=False)
+    log.info("wrote %d teams -> %s", len(teams), dest)
+    return dest
+
+
+def read_teams(paths: Paths) -> pd.DataFrame:
+    dest = paths.spadl / TEAMS_FILENAME
+    if not dest.exists():
+        raise FileNotFoundError(
+            f"{dest} not found; run `python scripts/build_spadl.py --corpus {paths.corpus}`"
+        )
+    return pd.read_parquet(dest)
+
+
+def team_name_lookup(paths: Paths) -> dict[tuple[str, int], str]:
+    """(provider, team_id) -> display name, empty if the corpus has no teams table yet.
+
+    Keyed by provider, not team id alone: the two providers number teams independently
+    (StatsBomb Serie A starts at 224, Wyscout at 3157). They happen not to collide today, but
+    a collision would silently label one club with another's name rather than raise.
+
+    Returns empty rather than raising so presentation code can fall back to the alias table
+    (Serie A, built before this store existed) without a try/except at every call site.
+    """
+    try:
+        teams = read_teams(paths)
+    except FileNotFoundError:
+        return {}
+    return {
+        (str(r.provider), int(r.team_id)): str(r.team_name)
+        for r in teams.itertuples(index=False)
+    }
+
+
 def store_summary(paths: Paths) -> pd.DataFrame:
     """Quick inventory of what has been built, for logging and the README."""
     rows = []

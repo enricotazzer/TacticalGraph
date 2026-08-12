@@ -156,12 +156,27 @@ class DemoBundle:
         identity = [c for c in ("game_id", "team_id", "season", "provider", "player_id") if c in frame]
         return frame[identity], frame[dims]
 
+    def corpus_label(self) -> str:
+        """Which competition this bundle was built from.
+
+        Shown on every page because two corpora share a season key and a provider: without
+        the competition named, a Premier League 2015/16 bundle is indistinguishable from a
+        Serie A 2015/16 one, and every number would be attributed to the wrong league.
+        """
+        if self.manifest:
+            label = self.manifest.get("corpus_label")
+            if label:
+                return str(label)
+        return "unknown corpus"
+
     def provenance(self) -> str:
         if self.source == "bundle" and self.manifest:
             generated = self.manifest.get("generated_at", "unknown")
             sha = self.manifest.get("git_sha") or "no-commit"
-            return f"committed bundle · generated {generated} · {sha}"
-        return f"live DATA_ROOT · {self.root}"
+            return (
+                f"{self.corpus_label()} · committed bundle · generated {generated} · {sha}"
+            )
+        return f"{self.corpus_label()} · live DATA_ROOT · {self.root}"
 
 
 def load_bundle(prefer_bundle: bool = True) -> DemoBundle:
@@ -183,8 +198,8 @@ def load_bundle(prefer_bundle: bool = True) -> DemoBundle:
         from tacticalgraph.config import Paths
 
         paths = Paths.load()
-        if paths.root.exists():
-            return DemoBundle(source="data_root", root=paths.root)
+        if paths.derived.exists():
+            return DemoBundle(source="data_root", root=paths.derived)
     except RuntimeError as exc:
         log.debug("DATA_ROOT unavailable: %s", exc)
 

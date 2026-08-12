@@ -3,6 +3,7 @@
 
     python scripts/build_spadl.py --all
     python scripts/build_spadl.py --provider statsbomb --limit 20
+    python scripts/build_spadl.py --all --corpus premier_league
 
 Also builds the StatsBomb-only enrichment tables used to validate the harmonisation
 (true recipients, native possession ids, 24-class positions). Those are validation data,
@@ -22,12 +23,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pandas as pd  # noqa: E402
 
-from tacticalgraph.config import Paths  # noqa: E402
+from tacticalgraph.config import CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402
 from tacticalgraph.data.adapters import (  # noqa: E402
-    BINDINGS,
+    bindings_for,
     convert_game,
     get_binding,
     load_games,
+    team_names,
 )
 from tacticalgraph.data.download import statsbomb_match_ids  # noqa: E402
 from tacticalgraph.data.enrichment import build_enrichment  # noqa: E402
@@ -36,6 +38,7 @@ from tacticalgraph.data.spadl_store import (  # noqa: E402
     store_summary,
     write_actions,
     write_games,
+    write_teams,
 )
 
 log = logging.getLogger("build_spadl")
@@ -45,7 +48,7 @@ def build_provider(
     paths: Paths, provider: str, limit: int | None = None
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Convert every available game for one provider."""
-    binding = get_binding(provider)
+    binding = get_binding(provider, paths.corpus)
     loader = binding.make_loader(paths)
     games = load_games(paths, provider)
 
@@ -106,7 +109,11 @@ def build_provider(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--all", action="store_true")
-    parser.add_argument("--provider", choices=sorted(BINDINGS), action="append")
+    parser.add_argument("--provider", choices=["statsbomb", "wyscout"], action="append")
+    parser.add_argument(
+        "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
+        help="which competition corpus to build (default: %(default)s)",
+    )
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--skip-enrichment", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -121,17 +128,29 @@ def main() -> int:
     warnings.filterwarnings("ignore", category=FutureWarning)
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-    providers = sorted(BINDINGS) if args.all else (args.provider or [])
+    available = bindings_for(args.corpus)
+    providers = sorted(available) if args.all else (args.provider or [])
     if not providers:
         parser.error("pick --all or --provider {statsbomb,wyscout}")
+    unknown = [p for p in providers if p not in available]
+    if unknown:
+        parser.error(
+            f"corpus {args.corpus!r} has no provider(s) {unknown}; it has {sorted(available)}"
+        )
 
-    paths = Paths.load().ensure()
+    paths = Paths.load(args.corpus).ensure()
+    log.info("corpus = %s (%s)", paths.corpus, paths.spec.label)
     all_games = []
+    all_teams = []
 
     for provider in providers:
         actions, games = build_provider(paths, provider, limit=args.limit)
         write_actions(paths, actions, season=games["season"].iloc[0], provider=provider)
         all_games.append(games)
+        try:
+            all_teams.append(team_names(paths, provider))
+        except Exception:  # noqa: BLE001 - names are for display only, never for modelling
+            log.warning("could not extract team names for %s", provider, exc_info=True)
 
         if provider == "statsbomb" and not args.skip_enrichment:
             game_ids = sorted(actions["game_id"].astype(int).unique())
@@ -148,6 +167,8 @@ def main() -> int:
         pass
 
     write_games(paths, pd.concat(all_games, ignore_index=True))
+    if all_teams:
+        write_teams(paths, pd.concat(all_teams, ignore_index=True))
 
     print()
     print(store_summary(paths).to_string(index=False))
