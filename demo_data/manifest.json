@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-10T18:39:48+00:00",
-  "git_sha": null,
+  "generated_at": "2026-08-11T19:24:32+00:00",
+  "git_sha": "2fd04d0",
   "source": "/Volumes/T7/tacticalgraph",
   "tables": {
     "games.parquet": {
       "rows": 760,
       "columns": 14,
-      "size_kb": 20.9,
+      "size_kb": 21.2,
       "source": "spadl/games.parquet"
     },
     "players.parquet": {
@@ -18,13 +18,13 @@
     "full_nodes.parquet": {
       "rows": 19335,
       "columns": 14,
-      "size_kb": 850.4,
+      "size_kb": 850.3,
       "source": "networks/full_nodes.parquet"
     },
     "full_edges.parquet": {
       "rows": 150879,
       "columns": 10,
-      "size_kb": 2325.0,
+      "size_kb": 2324.6,
       "source": "networks/full_edges.parquet"
     },
     "centrality_players.parquet": {
@@ -36,25 +36,38 @@
     "centrality_player_season.parquet": {
       "rows": 876,
       "columns": 16,
-      "size_kb": 90.6,
+      "size_kb": 90.7,
       "source": "networks/centrality_player_season.parquet"
     },
     "centrality_teams.parquet": {
       "rows": 1520,
       "columns": 10,
-      "size_kb": 38.6,
+      "size_kb": 38.7,
       "source": "networks/centrality_teams.parquet"
     },
     "role_embeddings.parquet": {
       "rows": 18701,
       "columns": 38,
-      "size_kb": 3574.7,
+      "size_kb": 3574.8,
       "source": "models/role_embeddings.parquet"
+    },
+    "module3_test_predictions.parquet": {
+      "rows": 6080,
+      "columns": 16,
+      "size_kb": 244.0,
+      "source": "models/module3_test_predictions.parquet"
+    },
+    "module4_chains_sample.parquet": {
+      "rows": 22614,
+      "columns": 26,
+      "size_kb": 1454.4,
+      "source": "models/module4_chains.parquet (stratified sample)",
+      "full_rows": 109912
     },
     "windowed_sample_nodes.parquet": {
       "rows": 7352,
       "columns": 14,
-      "size_kb": 263.1,
+      "size_kb": 263.2,
       "source": "networks/windowed_*.parquet (subsampled)",
       "matches": 20
     },
@@ -70,6 +83,10 @@
     "role_gnn_both.pt": {
       "size_kb": 28.8,
       "source": "models/role_gnn_both.pt"
+    },
+    "chain_encoder.pt": {
+      "size_kb": 166.5,
+      "source": "models/chain_encoder.pt"
     }
   },
   "reports": [
@@ -81,6 +98,16 @@
     "module2_roles_within_season.json",
     "module2_roles_within_season_seed0.json",
     "module2_roles_within_season_seed1.json",
-    "module2_roles_within_season_seed2.json"
+    "module2_roles_within_season_seed2.json",
+    "module3_outcome_cross_season_seed0.json",
+    "module3_outcome_cross_season_seed1.json",
+    "module3_outcome_cross_season_seed2.json",
+    "module3_outcome_within_season_seed0.json",
+    "module3_outcome_within_season_seed1.json",
+    "module3_outcome_within_season_seed2.json",
+    "module4_patterns_cross_season.json",
+    "module4_patterns_within_season.json",
+    "pattern_review_sheet_gru-autoencoder.csv",
+    "pattern_review_sheet_hand-crafted.csv"
   ]
 }

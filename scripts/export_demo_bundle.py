@@ -27,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from tacticalgraph.config import Paths  # noqa: E402
@@ -46,9 +47,23 @@ COPY_TABLES: tuple[tuple[str, str], ...] = (
     ("networks/centrality_player_season.parquet", "centrality_player_season.parquet"),
     ("networks/centrality_teams.parquet", "centrality_teams.parquet"),
     ("models/role_embeddings.parquet", "role_embeddings.parquet"),
+    # Module 3 output. Small enough to ship whole (6,080 test rows).
+    ("models/module3_test_predictions.parquet", "module3_test_predictions.parquet"),
 )
 
-COPY_FILES: tuple[tuple[str, str], ...] = (("models/role_gnn_both.pt", "role_gnn_both.pt"),)
+# The full chain table is 109,912 rows / 6.2 MB. The app reads every *headline* number from the
+# report JSONs (computed on all chains), and needs the table only to browse individual examples,
+# so a cluster-stratified sample is shipped instead.
+CHAINS_SAMPLE_PER_CLUSTER = 1500
+
+COPY_FILES: tuple[tuple[str, str], ...] = (
+    ("models/role_gnn_both.pt", "role_gnn_both.pt"),
+    ("models/chain_encoder.pt", "chain_encoder.pt"),
+)
+
+# Review sheets are CSV so a human can open them in a spreadsheet; carried in the bundle so the
+# app can report the review status without needing DATA_ROOT.
+COPY_CSV_GLOB = "pattern_review_sheet_*.csv"
 
 
 def _git_sha() -> str | None:
@@ -139,6 +154,35 @@ def main() -> int:
         }
         log.info("%-38s %18.1f KB", dest_name, (BUNDLE_DIR / dest_name).stat().st_size / 1e3)
 
+    # Module 4 chains, stratified by cluster so every cluster is browsable.
+    chains_source = paths.root / "models" / "module4_chains.parquet"
+    if chains_source.exists():
+        chains = pd.read_parquet(chains_source)
+        cluster_columns = [c for c in chains.columns if c.startswith("cluster_")]
+        if cluster_columns:
+            rng = np.random.default_rng(0)
+            keep = set()
+            for column in cluster_columns:
+                for _, group in chains.groupby(column):
+                    size = min(len(group), CHAINS_SAMPLE_PER_CLUSTER)
+                    keep.update(rng.choice(group.index.to_numpy(), size, replace=False).tolist())
+            sample = chains.loc[sorted(keep)].reset_index(drop=True)
+        else:
+            sample = chains
+        dest = BUNDLE_DIR / "module4_chains_sample.parquet"
+        sample.to_parquet(dest, index=False)
+        manifest["tables"]["module4_chains_sample.parquet"] = {
+            "rows": int(len(sample)),
+            "columns": int(sample.shape[1]),
+            "size_kb": round(dest.stat().st_size / 1e3, 1),
+            "source": "models/module4_chains.parquet (stratified sample)",
+            "full_rows": int(len(chains)),
+        }
+        log.info("%-38s %7d rows  %8.1f KB (of %d)", "module4_chains_sample.parquet",
+                 len(sample), dest.stat().st_size / 1e3, len(chains))
+    else:
+        missing.append("models/module4_chains.parquet")
+
     # Windowed sample, for Module 3's spec page.
     if (paths.networks / "windowed_nodes.parquet").exists():
         window_nodes, window_edges = _subsample_windowed(paths, args.windowed_matches)
@@ -165,6 +209,13 @@ def main() -> int:
             continue
         shutil.copy2(report, BUNDLE_DIR / "reports" / report.name)
         manifest["reports"].append(report.name)
+
+    # Module 4 human-review sheets (blank verdict column until a person fills them in).
+    for sheet in sorted(paths.reports.glob(COPY_CSV_GLOB)):
+        if sheet.name.startswith("._"):
+            continue
+        shutil.copy2(sheet, BUNDLE_DIR / "reports" / sheet.name)
+        manifest["reports"].append(sheet.name)
 
     if missing:
         log.warning(

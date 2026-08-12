@@ -38,6 +38,10 @@ _FALLBACK = {
     "role_gnn_both.pt": "models/role_gnn_both.pt",
     "windowed_sample_nodes.parquet": "networks/windowed_nodes.parquet",
     "windowed_sample_edges.parquet": "networks/windowed_edges.parquet",
+    # Modules 3 and 4.
+    "module3_test_predictions.parquet": "models/module3_test_predictions.parquet",
+    "module4_chains_sample.parquet": "models/module4_chains.parquet",
+    "chain_encoder.pt": "models/chain_encoder.pt",
 }
 
 
@@ -130,6 +134,20 @@ class DemoBundle:
     @property
     def embeddings(self) -> pd.DataFrame:
         return self.table("role_embeddings.parquet")
+
+    @property
+    def outcome_predictions(self) -> pd.DataFrame:
+        """Module 3 per-(match, checkpoint) probabilities on the test fold."""
+        return self.table("module3_test_predictions.parquet")
+
+    @property
+    def chains(self) -> pd.DataFrame:
+        """Module 4 possession chains -- a cluster-stratified sample, not the full table.
+
+        Headline numbers come from the report JSONs, which are computed over all 109,912
+        chains; this table exists so individual examples can be browsed.
+        """
+        return self.table("module4_chains_sample.parquet")
 
     def embedding_matrix(self) -> tuple[pd.DataFrame, "pd.DataFrame"]:
         """Split the embedding table into (identity columns, embedding columns)."""

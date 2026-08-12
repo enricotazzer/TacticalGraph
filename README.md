@@ -4,10 +4,20 @@ Football tactical analysis on Serie A event data, combining graph neural network
 models and reinforcement learning. Every module is benchmarked against an explicit baseline
 and validated quantitatively, and everything is sized to train inside Kaggle's free tier.
 
-**Status: Phases 1–3 complete** — data ingestion and cross-provider harmonisation, passing
-network construction, classical centrality baseline, and GNN functional-role embeddings with
-a full ablation. Phases 4–8 (result prediction, pattern detection, RL, dashboard) are
-scoped in [`docs/ROADMAP.md`](docs/ROADMAP.md) but not yet implemented.
+**Status: Modules 1–4 complete.** Data ingestion and cross-provider harmonisation, passing
+network construction, the classical centrality baseline, GNN functional-role embeddings,
+in-match result prediction (baseline ladder vs GNN+Transformer), and recurring tactical
+pattern discovery. Module 5 (RL pass choice) is blocked on data Serie A does not have;
+Module 6 exists as the demo app. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+Two of the four headline findings are negative, and they are reported as prominently as the
+positive ones:
+
+| Module | Finding |
+|---|---|
+| 2 | The GNN embedding beats classical centrality **10×** on role alignment — but passing topology adds only ~1.1–1.5 pp over pitch position, so most recoverable signal is spatial. |
+| 3 | **B1 (scoreline + aggregates + xT) is the best model.** The GNN+Transformer is *significantly worse than B0* in all 6 runs: 300 independent training labels cannot support it. |
+| 4 | Clustering finds possession patterns with a **56–68% shot rate against a 12.4% base** — and the interpretable baseline beats the learned encoder at every k. |
 
 ---
 
@@ -303,6 +313,151 @@ decomposed with this corpus.
 
 ---
 
+## Module 3 — in-match result prediction
+
+Predicts win/draw/loss at each of **16 checkpoints** (the closing minute of each 15-minute
+window, so the tabular ladder and the graph model are scored on identical support).
+
+### The rule that governs this module
+
+> Every feature at checkpoint *t* must be computable from actions with `minute <= t`, and
+> nothing else.
+
+That rules out full-match aggregates *and* full-match network metrics — B2's structural
+features come from the window that has just closed, not from `centrality_teams.parquet`.
+A leak here would not raise an error; it would make every number below look excellent and mean
+nothing. `tests/test_match_state.py` enforces it by rebuilding each feature row from a
+truncated action stream and asserting it is unchanged, at five different checkpoints.
+
+Transformer causality is enforced by an additive `-inf` mask and **verified empirically**:
+perturbing windows 12–15 leaves predictions 0–11 bit-identical.
+
+### Results (test fold, mean over 3 seeds)
+
+All figures are means over 3 seeds. The tabular rungs are deterministic, so only the graph
+model varies between seeds.
+
+| Model | Features | cross-season log-loss | within-season log-loss | Brier | Accuracy | ECE |
+|---|---|---|---|---|---|---|
+| prior | class frequencies | 1.0758 | 1.0268 | 0.651 | 0.432 | 0.012 |
+| B0 | scoreline + minutes left | 0.7504 | **0.7125** | 0.429 | 0.667 | 0.024 |
+| **B1** | + shots, passes, xThreat | **0.7075** | 0.7305 | 0.407 | 0.692 | 0.023 |
+| B2 | + rolling form, network (GBM) | 0.7660 | 0.7181 | 0.439 | 0.654 | 0.040 |
+| GNN + Transformer | windowed graph sequences | 0.9012 | 0.9551 | 0.514 | 0.627 | 0.128 |
+
+Paired bootstrap against B0, **resampled by match** (16 correlated rows per match; resampling
+rows would shrink every interval ~4× and manufacture significance):
+
+| Model | cross-season Δ vs B0 | 95% CI | Verdict | within-season Δ | 95% CI |
+|---|---|---|---|---|---|
+| B1 | **−0.0429** | [−0.067, −0.018] | significantly better | +0.0180 | [−0.048, +0.088] |
+| B2 | +0.0156 | [−0.017, +0.050] | indistinguishable | +0.0056 | [−0.062, +0.069] |
+| GNN + Transformer | **+0.1508** | [+0.085, +0.220] | significantly **worse** | **+0.2425** | [+0.079, +0.424] |
+
+Note the within-season column: **B1's advantage disappears entirely** once the provider change
+is removed (Δ +0.018, CI spanning zero), while the graph model's deficit gets larger. Only the
+GNN result is consistent across both splits.
+
+### What this shows
+
+**B1 wins on the cross-season split**: shots, passes and accumulated xThreat genuinely add
+over the scoreline. But on the **unconfounded within-season control, B0 wins** and B1/B2 are
+indistinguishable from it — with 60 test matches the intervals overlap heavily, so B1's
+advantage may be specific to the cross-season setting rather than general.
+
+**The GNN+Transformer fails, and the cause is measured rather than guessed.** Train loss falls
+1.30 → 0.59 while validation loss rises 0.89 → 2.55: with **300 independent training labels**
+a 13k–77k parameter sequence model memorises the training set. Three fixes were tried and none
+changed the conclusion:
+
+1. Learning rate 1e-3 → 3e-4 with patience 8 → 25, after the val curve showed violent
+   oscillation (0.81 → 1.16 → 0.89 → 1.25) and a stop at epoch 9 with the best score at epoch 0.
+2. A **residual path from the scalar state to the logits**, so the model can trivially recover
+   the tabular baseline. This is the correct experimental design — without it the comparison
+   conflates "graphs do not help" with "the network failed to relearn goal difference".
+3. A **capacity sweep (5k / 13k / 77k params) selected on validation**, never on test.
+
+Further tuning would be fishing on the test set, so the negative result stands.
+
+**Two label caveats, reported not hidden.** The derived running scoreline reproduces the
+recorded final score for **758/760 games (99.7%)**; the two failures are Wyscout matches where
+a goal is simply absent from the event stream, and no phantom goal was inserted to hide it.
+And the test season's outcome prior differs from the training season's (away wins 28.9% →
+35.0%), a real calibration headwind.
+
+`goal_diff` dominates B2's permutation importance (0.563), which is the expected sanity check —
+anything outranking it would mean the feature layer is broken.
+
+---
+
+## Module 4 — recurring tactical patterns
+
+Clusters **109,912 possession chains** (those with ≥3 provider-comparable actions, from
+186,318 reconstructed) two ways, and measures how often each pattern precedes a shot.
+
+### Base rate: 12.4%, not 9.7%
+
+9.7% of *all* chains contain a shot, but the module clusters only chains with ≥3 comparable
+actions, and longer possessions are likelier to shoot — so the population being clustered has a
+**12.4%** base rate. Every lift below is measured against 12.4%; using the unfiltered figure
+would inflate them all.
+
+The comparable-types filter is not optional: raw chain length differs between providers by
+**1.44×** (mean 7.91 vs 5.51 actions, StatsBomb logging carries as dribbles), which falls to
+**0.90×** (4.38 vs 4.87) once filtered. Without it the clustering would partly be clustering the
+data provider.
+
+### Results (k = 8, cross-season test fold)
+
+Hand-crafted representation, P(shot | cluster) with Wilson intervals against the 12.0% test
+base rate:
+
+| Cluster | Auto-generated name | Share | P(shot) | 95% CI | Lift |
+|---|---|---|---|---|---|
+| 2 | long from middle third, high threat | 3.0% | **0.573** | [0.549, 0.597] | **4.78×** |
+| 4 | open-play direct from middle third | 9.9% | 0.241 | [0.229, 0.252] | 2.01× |
+| 0 | set-piece from final third | 11.5% | 0.228 | [0.218, 0.239] | 1.90× |
+| 5 | long lateral from middle third, high threat | 8.5% | 0.189 | [0.178, 0.200] | 1.58× |
+| 1 | long from middle third | 20.3% | 0.118 | [0.112, 0.124] | 0.98× |
+| 6 | set-piece brief direct from defensive third | 20.1% | 0.038 | [0.035, 0.042] | 0.32× |
+| 3 | lateral from middle third | 13.3% | 0.034 | [0.030, 0.038] | 0.28× |
+| 7 | open-play brief direct from defensive third | 13.4% | **0.004** | [0.003, 0.006] | 0.03× |
+
+**7 of 8 clusters differ from the base rate by more than sampling noise**, spanning 4.8× above
+to 40× below.
+
+| Representation | max lift (test) | shot-rate spread | Silhouette | clusters ≠ base |
+|---|---|---|---|---|
+| **hand-crafted (baseline)** | **4.78×** | 0.569 | 0.112 | 7/8 |
+| GRU autoencoder | 3.38× | 0.394 | 0.148 | 7/8 |
+
+### What this shows
+
+**The interpretable baseline beats the learned encoder at every k** (4.78× vs 3.38× at k=8;
+5.02× vs 2.43× at k=6). Inspecting the latent clusters shows why: three of eight are 93–95%
+set-piece-initiated, so the autoencoder is largely clustering *how a possession started* — the
+action-type one-hot dominates its reconstruction loss — rather than how it developed. The same
+pattern as Module 2, where simple positional features also beat the learned alternative.
+
+**Cross-season stability isolates the provider effect.** Within a single season and provider,
+**8 of 8** clusters keep a statistically indistinguishable shot rate. Across the season/provider
+boundary that drops to **4 of 8** (hand-crafted) and **5 of 8** (GRU). The control split is what
+makes that attribution possible.
+
+### Human validation: pending, by design
+
+The project's validation plan calls for sampling patterns and judging whether they are
+tactically sensible. **That requires a person and has not been done.**
+`scripts/review_patterns.py` produces everything a reviewer needs — a 48-row sheet per
+representation with match, timestamp, zones and a blank `sensible_y_n` column, plus 16
+per-cluster pitch figures drawing the sampled possessions action by action. The app reports the
+step as pending rather than implying a review happened.
+
+Cluster names are generated from the same profile numbers printed beside them, ranked relative
+to sibling clusters. They are a reading aid and cannot corroborate anything.
+
+---
+
 ## Resource footprint
 
 Everything runs on a laptop; nothing here needs a Kaggle GPU session, which is the point.
@@ -316,6 +471,11 @@ Everything runs on a laptop; nothing here needs a Kaggle GPU session, which is t
 | GNN `position` | 6.6 s | 672 MB | 4 features |
 | GNN `topology` | 11.5 s | 703 MB | 10 features |
 | GNN `both` | 7.8 s | 719 MB | 14 features |
+| M3 state table (12,160 rows × 16 checkpoints) | 10.2 s | 1,987 MB | leakage-safe, per checkpoint |
+| M3 baseline ladder (prior/B0/B1/B2) | 1.5 s | 1,754 MB | incl. val-based capacity selection |
+| M3 GNN+Transformer (3-config sweep) | 165 s | 948 MB | all three capacities trained |
+| M4 chain table (109,912 chains) | 1.0 s | 1,840 MB | from 1.26 M actions |
+| M4 GRU autoencoder | 43 s | 362 MB | self-supervised, 30 epochs |
 
 Device: Apple M-series (MPS). GPU allocation is reported as ~0 MB because these graphs
 (~13 nodes each, 1,520 graphs) are trained full-batch on CPU tensors — neighbour sampling
@@ -338,10 +498,17 @@ python scripts/build_spadl.py --all          # canonical store + enrichment
 python scripts/validate_harmonization.py     # Phase 1 gate
 python scripts/build_networks.py --all
 python scripts/visual_qa.py                  # inspect figures before continuing
-python scripts/run_centrality.py             # Phase 2
-python scripts/train_roles.py                # Phase 3
+python scripts/run_centrality.py             # Module 2 baseline
+python scripts/train_roles.py                # Module 2 GNN
 python scripts/train_roles.py --split within_season   # unconfounded control
-pytest                                       # 32 tests
+
+python scripts/train_outcome.py                       # Module 3
+python scripts/train_outcome.py --split within_season  # control
+python scripts/train_patterns.py --k 8                # Module 4
+python scripts/review_patterns.py                     # review sheet + figures
+
+python scripts/export_demo_bundle.py         # refresh demo_data/
+pytest                                       # 74 tests
 ```
 
 ### Environment gotchas, all of them load-bearing
@@ -391,6 +558,19 @@ pytest                                       # 32 tests
   schedules. These are proof-of-concept results, not state-of-the-art claims.
 - **Three seeds** per configuration. Enough to show the ablation ordering is stable; not
   enough for tight confidence intervals on a ~1 pp effect.
+- **Module 3 is data-limited, not architecture-limited.** 300 independent training matches is
+  the binding constraint. The negative result says nothing about whether graph sequence models
+  help at scale — only that they do not help here, and the honest remedy is more data, not a
+  bigger model.
+- **The Module 3 running scoreline is 99.7% faithful** (758/760 games). Two Wyscout matches are
+  missing a goal from the event stream entirely; no substitute goal was invented.
+- **Module 4's shot-precursor analysis is associational.** A cluster with a 57% shot rate
+  describes possessions that ended in shots; it does not establish that playing that way causes
+  them.
+- **Module 4's human review has not been performed.** The sheets and figures are generated and
+  waiting, so any "proportion judged sensible" is absent rather than estimated.
+- **Module 5 is not implemented and cannot be on this corpus**: Serie A has no 360 freeze-frame
+  data in either season.
 
 ---
 
@@ -414,11 +594,18 @@ src/tacticalgraph/
     passing_network.py full-match and 15-min/5-min-stride windowed networks
   features/
     centrality.py      classical baseline (inverted weights for path metrics)
+    match_state.py     M3 labels + leakage-safe per-checkpoint features
+    chains.py          M4 possession chains, features and token sequences
   models/
-    role_gnn.py        GraphSAGE + the three feature sets
+    role_gnn.py            GraphSAGE + the three feature sets
+    outcome_baselines.py   the B0/B1/B2 ladder
+    outcome_gnn_transformer.py  GraphSAGE per window + causal Transformer
+    chain_encoder.py       GRU autoencoder over possession sequences
   eval/
     splits.py          temporal splits; rejects random splits
     clustering.py      representation comparison + stability diagnostics
+    outcome_metrics.py log-loss/Brier/ECE, bootstrap resampled BY MATCH
+    patterns.py        Wilson intervals, shot lift, cross-season stability
     resources.py       wall time and peak memory for every run
   viz/
     pitch.py           mplsoccer networks, provider comparison plot

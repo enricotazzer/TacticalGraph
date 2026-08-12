@@ -106,21 +106,27 @@ def main() -> int:
     pool = chains[chains["fold"] == "test"]
     if pool.empty:
         pool = chains
-    sample = (
-        pool.groupby(column, group_keys=False)
-        .apply(lambda g: g.sample(min(len(g), args.per_cluster), random_state=args.seed))
-        .reset_index(drop=True)
-    )
+    # Sample per cluster by building indices directly: `groupby(...).sample(n=...)` raises when
+    # a cluster holds fewer rows than requested, and `groupby(...).apply(...)` is deprecated for
+    # operating on the grouping column.
+    picks = []
+    for _, group in pool.groupby(column):
+        picks.append(group.sample(min(len(group), args.per_cluster), random_state=args.seed))
+    sample = pd.concat(picks, ignore_index=True)
+    # `itertuples` renames any column that is not a valid Python identifier, and the
+    # representation names contain hyphens -- so read the cluster ids from an array instead.
+    sample_clusters = sample[column].to_numpy()
 
     games = read_games(paths).set_index("game_id")
     rows = []
-    for row in sample.itertuples(index=False):
+    for position, row in enumerate(sample.itertuples(index=False)):
         game = games.loc[row.game_id]
+        cluster_id = int(sample_clusters[position])
         rows.append(
             {
-                "cluster": int(getattr(row, column)),
-                "cluster_label": labels.get(int(getattr(row, column)), ""),
-                "cluster_shot_rate": shot_rates.get(int(getattr(row, column)), float("nan")),
+                "cluster": cluster_id,
+                "cluster_label": labels.get(cluster_id, ""),
+                "cluster_shot_rate": shot_rates.get(cluster_id, float("nan")),
                 "game_id": int(row.game_id),
                 "possession_id": int(row.possession_id),
                 "season": row.season,
@@ -162,17 +168,24 @@ def main() -> int:
     figure_dir = paths.figures / "pattern_clusters"
     figure_dir.mkdir(parents=True, exist_ok=True)
 
+    import numpy as np
+
     for cluster, group in sample.groupby(column):
         n = len(group)
         columns = min(3, n)
         rows_n = (n + columns - 1) // columns
         figure, axes = plt.subplots(rows_n, columns, figsize=(4.6 * columns, 3.1 * rows_n))
-        axes = [axes] if n == 1 else list(pd.Series(axes).explode().dropna()) if rows_n > 1 else list(axes)
+        axes = list(np.atleast_1d(axes).ravel())
 
         for ax, chain in zip(axes, group.itertuples(index=False)):
+            # Restrict to the team in possession. A reconstructed chain legitimately contains
+            # the opponent's contest touches (a clearance absorbed as contest rather than a
+            # change of possession), but drawing them produces stray disconnected arrows that
+            # make the review plot unreadable.
             chain_actions = relevant[
                 (relevant["game_id"] == chain.game_id)
                 & (relevant["possession_id"] == chain.possession_id)
+                & (relevant["team_id"] == chain.team_id)
             ]
             draw_chain(
                 ax,
