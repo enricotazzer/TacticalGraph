@@ -266,10 +266,14 @@ else:
         "immediately and would never appear in a summary table."
     )
     single = clubs.sort_values("club")
+    # Explicit key: the match-picker section above already has a selectbox labelled "Club",
+    # and Streamlit derives widget identity from label + options, so without this the two
+    # collide and the page fails to render.
     picked = st.selectbox(
         "Club",
         list(range(len(single))),
         format_func=lambda i: single.iloc[i]["club"],
+        key="season_aggregate_club",
     )
     row = single.iloc[picked]
     network = build_network(

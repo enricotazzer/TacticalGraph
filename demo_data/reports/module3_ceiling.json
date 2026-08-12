@@ -1,0 +1,2542 @@
+{
+  "corpora": [
+    "premier_league",
+    "serie_a"
+  ],
+  "seed": 0,
+  "pooled_matches": 1140,
+  "split_kinds": {
+    "premier_league": "matchweek",
+    "serie_a": "cross_season"
+  },
+  "learning_curve": [
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 0.7855
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 0.831
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 0.77951
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 1.43302
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 1.3438
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 1.44476
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 1.93543
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 2.18285
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 0,
+      "test_log_loss": 1.90287
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 0.82355
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 0.81004
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 0.82533
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 0.94323
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 0.91208
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 0.94733
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 2.03863
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 2.18721
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 1,
+      "test_log_loss": 2.01908
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 0.93961
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 1.11375
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 0.9167
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 1.05155
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 1.32436
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 1.01565
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 1.94958
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 2.36404
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 2,
+      "test_log_loss": 1.89505
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 0.85391
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 0.87156
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 0.85158
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 1.01673
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 1.17959
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 0.9953
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 1.62663
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 1.87807
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 3,
+      "test_log_loss": 1.59355
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 0.90863
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 0.88749
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 0.91141
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 1.19667
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 1.32039
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 1.1804
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 1.76162
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 2.05478
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "fraction": 0.0625,
+      "draw": 4,
+      "test_log_loss": 1.72304
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 0.76455
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 0.76835
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 0.76406
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 0.76059
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 0.79836
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 0.75562
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 1.64824
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 1.69961
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 0,
+      "test_log_loss": 1.64148
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 0.75447
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 0.77112
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 0.75228
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 0.97299
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 1.02977
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 0.96552
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 1.49172
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 1.73199
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 1,
+      "test_log_loss": 1.4601
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 0.7879
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 0.88256
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 0.77544
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 0.76748
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 0.89804
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 0.7503
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 1.48439
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 2.00195
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 2,
+      "test_log_loss": 1.41629
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 0.77957
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 0.84961
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 0.77035
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 0.82498
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 0.86449
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 0.81978
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 1.67487
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 1.92875
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 3,
+      "test_log_loss": 1.64146
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 0.75434
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 0.84519
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 0.74239
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 0.8144
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 0.91362
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 0.80135
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 1.68291
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 2.0953
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "fraction": 0.125,
+      "draw": 4,
+      "test_log_loss": 1.62865
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 0.75877
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 0.78163
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 0.75577
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 0.74576
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 0.77898
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 0.74139
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 1.28224
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 1.27814
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 0,
+      "test_log_loss": 1.28278
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 0.7631
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 0.77569
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 0.76145
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 0.79396
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 0.81978
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 0.79057
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 1.12828
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 1.22608
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 1,
+      "test_log_loss": 1.11542
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 0.77052
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 0.8236
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 0.76354
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 0.74096
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 0.83591
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 0.72846
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 1.20672
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 1.2101
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 2,
+      "test_log_loss": 1.20628
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 0.75526
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 0.79237
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 0.75038
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 0.76758
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 0.76397
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 0.76806
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 1.2718
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 1.04006
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 3,
+      "test_log_loss": 1.30229
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 0.7595
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 0.79052
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 0.75542
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 0.81296
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 0.82505
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 0.81136
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 1.14237
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 1.07206
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "fraction": 0.25,
+      "draw": 4,
+      "test_log_loss": 1.15163
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 0.75527
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 0.77953
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 0.75208
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 0.73085
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 0.81209
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 0.72017
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 1.0261
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 0.98147
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 0,
+      "test_log_loss": 1.03197
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.74994
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.7975
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.74368
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.71783
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.77249
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.71064
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.93563
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.85424
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 1,
+      "test_log_loss": 0.94634
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.75048
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.78539
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.74589
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.74627
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.78248
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.74151
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.98093
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.95094
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 2,
+      "test_log_loss": 0.98488
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.75268
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.79349
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.74731
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.73254
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.80047
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.7236
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.89451
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.98221
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 3,
+      "test_log_loss": 0.88298
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.76099
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.78233
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.75819
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.73763
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.77696
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.73246
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.95228
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.99271
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "fraction": 0.5,
+      "draw": 4,
+      "test_log_loss": 0.94695
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.75095
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.79125
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.74565
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.72288
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.78641
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.71452
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.89846
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.99659
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 0,
+      "test_log_loss": 0.88555
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.75413
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.78246
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.7504
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.72369
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.76555
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.71819
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.86614
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.9306
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 1,
+      "test_log_loss": 0.85766
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.74961
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.78682
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.74472
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.72317
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.75903
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.71845
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.84511
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.97159
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 2,
+      "test_log_loss": 0.82847
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 0.74768
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 0.79252
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 0.74178
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 0.71669
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 0.77692
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 0.70877
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 0.80188
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 1.00669
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 3,
+      "test_log_loss": 0.77493
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.74917
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.78412
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.74457
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.71072
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.77903
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.70173
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.86606
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.95584
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "fraction": 0.75,
+      "draw": 4,
+      "test_log_loss": 0.85425
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.7503
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.78601
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.7456
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.71656
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.77416
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.70898
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.79234
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.89739
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 560,
+      "fraction": 1.0,
+      "draw": 0,
+      "test_log_loss": 0.77852
+    }
+  ],
+  "learning_curve_summary": [
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "mean": 0.86224,
+      "std": 0.06244,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "mean": 0.76817,
+      "std": 0.01509,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "mean": 0.76143,
+      "std": 0.00579,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "mean": 0.75387,
+      "std": 0.0045,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "mean": 0.75031,
+      "std": 0.00243,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_train_matches": 560,
+      "mean": 0.7503,
+      "std": 0.0,
+      "count": 1
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "mean": 1.12824,
+      "std": 0.19373,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "mean": 0.82809,
+      "std": 0.08577,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "mean": 0.77224,
+      "std": 0.03095,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "mean": 0.73302,
+      "std": 0.0104,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "mean": 0.71943,
+      "std": 0.00564,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_train_matches": 560,
+      "mean": 0.71656,
+      "std": 0.0,
+      "count": 1
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 35,
+      "mean": 1.86238,
+      "std": 0.16563,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 70,
+      "mean": 1.59643,
+      "std": 0.09979,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 140,
+      "mean": 1.20628,
+      "std": 0.07112,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 280,
+      "mean": 0.95789,
+      "std": 0.04931,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 420,
+      "mean": 0.85553,
+      "std": 0.03554,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_train_matches": 560,
+      "mean": 0.79234,
+      "std": 0.0,
+      "count": 1
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "mean": 0.90277,
+      "std": 0.12193,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "mean": 0.82337,
+      "std": 0.05105,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "mean": 0.79276,
+      "std": 0.01852,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "mean": 0.78765,
+      "std": 0.00759,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "mean": 0.78743,
+      "std": 0.00437,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_train_matches": 560,
+      "mean": 0.78601,
+      "std": 0.0,
+      "count": 1
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "mean": 1.21604,
+      "std": 0.18212,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "mean": 0.90086,
+      "std": 0.08458,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "mean": 0.80474,
+      "std": 0.03137,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "mean": 0.7889,
+      "std": 0.01677,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "mean": 0.77339,
+      "std": 0.01097,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_train_matches": 560,
+      "mean": 0.77416,
+      "std": 0.0,
+      "count": 1
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 35,
+      "mean": 2.13339,
+      "std": 0.18022,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 70,
+      "mean": 1.89152,
+      "std": 0.17131,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 140,
+      "mean": 1.16529,
+      "std": 0.10346,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 280,
+      "mean": 0.95231,
+      "std": 0.057,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 420,
+      "mean": 0.97226,
+      "std": 0.03075,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_train_matches": 560,
+      "mean": 0.89739,
+      "std": 0.0,
+      "count": 1
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "mean": 0.85691,
+      "std": 0.05823,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "mean": 0.7609,
+      "std": 0.01349,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "mean": 0.75731,
+      "std": 0.00524,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "mean": 0.74943,
+      "std": 0.00578,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "mean": 0.74542,
+      "std": 0.00314,
+      "count": 5
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_train_matches": 560,
+      "mean": 0.7456,
+      "std": 0.0,
+      "count": 1
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "mean": 1.11669,
+      "std": 0.2033,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "mean": 0.81851,
+      "std": 0.08734,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "mean": 0.76797,
+      "std": 0.03414,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "mean": 0.72568,
+      "std": 0.01181,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "mean": 0.71233,
+      "std": 0.0071,
+      "count": 5
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_train_matches": 560,
+      "mean": 0.70898,
+      "std": 0.0,
+      "count": 1
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 35,
+      "mean": 1.82672,
+      "std": 0.16777,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 70,
+      "mean": 1.5576,
+      "std": 0.11022,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 140,
+      "mean": 1.21168,
+      "std": 0.08088,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 280,
+      "mean": 0.95862,
+      "std": 0.05495,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 420,
+      "mean": 0.84017,
+      "std": 0.0417,
+      "count": 5
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_train_matches": 560,
+      "mean": 0.77852,
+      "std": 0.0,
+      "count": 1
+    }
+  ],
+  "plateau_verdict": [
+    {
+      "rung": "B0",
+      "test_fold": "pooled",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.75387,
+      "log_loss_full": 0.7503,
+      "delta": -0.00357,
+      "subsample_noise": 0.0045,
+      "plateaued": true
+    },
+    {
+      "rung": "B0",
+      "test_fold": "premier_league",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.78765,
+      "log_loss_full": 0.78601,
+      "delta": -0.00164,
+      "subsample_noise": 0.00759,
+      "plateaued": true
+    },
+    {
+      "rung": "B0",
+      "test_fold": "serie_a",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.74943,
+      "log_loss_full": 0.7456,
+      "delta": -0.00383,
+      "subsample_noise": 0.00578,
+      "plateaued": true
+    },
+    {
+      "rung": "B1",
+      "test_fold": "pooled",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.73302,
+      "log_loss_full": 0.71656,
+      "delta": -0.01646,
+      "subsample_noise": 0.0104,
+      "plateaued": false
+    },
+    {
+      "rung": "B1",
+      "test_fold": "premier_league",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.7889,
+      "log_loss_full": 0.77416,
+      "delta": -0.01474,
+      "subsample_noise": 0.01677,
+      "plateaued": true
+    },
+    {
+      "rung": "B1",
+      "test_fold": "serie_a",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.72568,
+      "log_loss_full": 0.70898,
+      "delta": -0.0167,
+      "subsample_noise": 0.01181,
+      "plateaued": false
+    },
+    {
+      "rung": "B2",
+      "test_fold": "pooled",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.95789,
+      "log_loss_full": 0.79234,
+      "delta": -0.16555,
+      "subsample_noise": 0.04931,
+      "plateaued": false
+    },
+    {
+      "rung": "B2",
+      "test_fold": "premier_league",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.95231,
+      "log_loss_full": 0.89739,
+      "delta": -0.05492,
+      "subsample_noise": 0.057,
+      "plateaued": true
+    },
+    {
+      "rung": "B2",
+      "test_fold": "serie_a",
+      "n_half": 280,
+      "n_full": 560,
+      "log_loss_half": 0.95862,
+      "log_loss_full": 0.77852,
+      "delta": -0.1801,
+      "subsample_noise": 0.05495,
+      "plateaued": false
+    }
+  ],
+  "pooled_vs_single": [
+    {
+      "corpus": "premier_league",
+      "rung": "B0",
+      "n_train_own": 260,
+      "n_train_pooled": 560,
+      "log_loss_own": 0.79688,
+      "ci_own": [
+        0.6386,
+        0.9669
+      ],
+      "log_loss_pooled": 0.78601,
+      "ci_pooled": [
+        0.6324,
+        0.9486
+      ],
+      "delta_pooled_minus_own": -0.01087
+    },
+    {
+      "corpus": "premier_league",
+      "rung": "B1",
+      "n_train_own": 260,
+      "n_train_pooled": 560,
+      "log_loss_own": 0.79132,
+      "ci_own": [
+        0.6354,
+        0.9695
+      ],
+      "log_loss_pooled": 0.77416,
+      "ci_pooled": [
+        0.6033,
+        0.9352
+      ],
+      "delta_pooled_minus_own": -0.01717
+    },
+    {
+      "corpus": "premier_league",
+      "rung": "B2",
+      "n_train_own": 260,
+      "n_train_pooled": 560,
+      "log_loss_own": 1.06552,
+      "ci_own": [
+        0.7562,
+        1.3605
+      ],
+      "log_loss_pooled": 0.89739,
+      "ci_pooled": [
+        0.6243,
+        1.1564
+      ],
+      "delta_pooled_minus_own": -0.16813
+    },
+    {
+      "corpus": "serie_a",
+      "rung": "B0",
+      "n_train_own": 300,
+      "n_train_pooled": 560,
+      "log_loss_own": 0.75038,
+      "ci_own": [
+        0.7053,
+        0.8073
+      ],
+      "log_loss_pooled": 0.7456,
+      "ci_pooled": [
+        0.7024,
+        0.7997
+      ],
+      "delta_pooled_minus_own": -0.00477
+    },
+    {
+      "corpus": "serie_a",
+      "rung": "B1",
+      "n_train_own": 300,
+      "n_train_pooled": 560,
+      "log_loss_own": 0.70752,
+      "ci_own": [
+        0.6584,
+        0.7672
+      ],
+      "log_loss_pooled": 0.70898,
+      "ci_pooled": [
+        0.6629,
+        0.7648
+      ],
+      "delta_pooled_minus_own": 0.00146
+    },
+    {
+      "corpus": "serie_a",
+      "rung": "B2",
+      "n_train_own": 300,
+      "n_train_pooled": 560,
+      "log_loss_own": 1.01072,
+      "ci_own": [
+        0.9,
+        1.1445
+      ],
+      "log_loss_pooled": 0.77852,
+      "ci_pooled": [
+        0.7069,
+        0.8559
+      ],
+      "delta_pooled_minus_own": -0.2322
+    }
+  ],
+  "pooled_prior_log_loss": 1.07344,
+  "resources": [
+    {
+      "name": "ceiling-state-tables",
+      "seconds": 17.28,
+      "peak_rss_mb": 1130.9,
+      "gpu_peak_mb": 0.0,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "ceiling-learning-curve",
+      "seconds": 53.22,
+      "peak_rss_mb": 1084.3,
+      "gpu_peak_mb": 0.0,
+      "device": "mps (Apple Silicon)"
+    }
+  ]
+}

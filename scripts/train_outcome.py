@@ -126,6 +126,19 @@ def main() -> int:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--n-boot", type=int, default=400)
     parser.add_argument(
+        "--batch-size", type=int, default=16,
+        help="matches per optimiser step. 1 reproduces the original one-step-per-match "
+             "behaviour, which is the 'before' side of the batching change.",
+    )
+    parser.add_argument(
+        "--lr-grid", nargs="+", type=float, default=None,
+        help="learning rates to sweep on val (default depends on --batch-size)",
+    )
+    parser.add_argument(
+        "--tag", default=None,
+        help="suffix for the report filename, so before/after runs do not overwrite",
+    )
+    parser.add_argument(
         "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
         help="which competition corpus to use (default: %(default)s)",
     )
@@ -215,30 +228,50 @@ def main() -> int:
             {"graph_out": 16, "d_model": 32, "n_heads": 2, "n_layers": 1, "dropout": 0.3},
             {"graph_out": 32, "d_model": 64, "n_heads": 4, "n_layers": 2, "dropout": 0.2},
         ]
+        # Learning rate is swept jointly with capacity because it is not independent of
+        # --batch-size: averaging the gradient over 16 matches instead of 1 shrinks every step,
+        # so the rate that suited batch size 1 systematically underfits at batch size 16.
+        # Selection is on the validation fold only, as for capacity.
+        learning_rates = args.lr_grid or ([3e-4] if args.batch_size == 1 else [1e-3, 3e-3])
         from tacticalgraph.models.outcome_gnn_transformer import evaluate_loss
 
         sweep, best_config, best_model, best_val = [], None, None, float("inf")
         with ResourceMonitor("gnn-transformer") as gnn_monitor:
-            for config in capacity_grid:
-                candidate, history = train_outcome_model(
-                    train_sequences,
-                    val_sequences,
-                    node_in_channels=len(WINDOW_NODE_FEATURES),
-                    state_in_channels=len(SEQUENCE_STATE_FEATURES),
-                    epochs=args.epochs,
-                    device=args.device,
-                    seed=args.seed,
-                    **config,
-                )
-                val_loss = evaluate_loss(candidate, val_sequences, device=args.device)
-                n_params = sum(p.numel() for p in candidate.parameters())
-                sweep.append({**config, "params": n_params, "val_log_loss": round(val_loss, 4),
-                              "epochs_run": len(history["train_loss"])})
-                log.info("capacity %s -> val log-loss %.4f (%d params)", config, val_loss, n_params)
-                if val_loss < best_val:
-                    best_val, best_config, best_model, gnn_history = (
-                        val_loss, config, candidate, history
+            for capacity in capacity_grid:
+                for learning_rate in learning_rates:
+                    config = {**capacity, "lr": learning_rate}
+                    candidate, history = train_outcome_model(
+                        train_sequences,
+                        val_sequences,
+                        node_in_channels=len(WINDOW_NODE_FEATURES),
+                        state_in_channels=len(SEQUENCE_STATE_FEATURES),
+                        epochs=args.epochs,
+                        device=args.device,
+                        seed=args.seed,
+                        batch_size=args.batch_size,
+                        **config,
                     )
+                    val_loss = evaluate_loss(candidate, val_sequences, device=args.device)
+                    n_params = sum(p.numel() for p in candidate.parameters())
+                    sweep.append({
+                        **config,
+                        "batch_size": args.batch_size,
+                        "params": n_params,
+                        "val_log_loss": round(val_loss, 4),
+                        "epochs_run": len(history["train_loss"]),
+                        "best_val_epoch": int(
+                            history["val_loss"].index(min(history["val_loss"]))
+                        ),
+                    })
+                    log.info(
+                        "config %s -> val log-loss %.4f (%d params, best epoch %d)",
+                        config, val_loss, n_params,
+                        history["val_loss"].index(min(history["val_loss"])),
+                    )
+                    if val_loss < best_val:
+                        best_val, best_config, best_model, gnn_history = (
+                            val_loss, config, candidate, history
+                        )
         gnn_resources = gnn_monitor.as_dict()
         model = best_model
         log.info("selected capacity %s (val log-loss %.4f)", best_config, best_val)
@@ -328,7 +361,10 @@ def main() -> int:
         "gnn_selected_capacity": best_config,
         "resources": [r for r in (state_monitor.as_dict(), ladder_monitor.as_dict(), gnn_resources) if r],
     }
-    destination = paths.reports / f"module3_outcome_{args.split}_seed{args.seed}.json"
+    suffix = f"_{args.tag}" if args.tag else ""
+    destination = (
+        paths.reports / f"module3_outcome_{args.split}_seed{args.seed}{suffix}.json"
+    )
     destination.write_text(json.dumps(report, indent=2, default=str))
     print(f"\nwrote {destination}")
 
@@ -340,7 +376,10 @@ def main() -> int:
         tidy_predictions[f"{name}_p_home"] = probabilities[:, 0]
         tidy_predictions[f"{name}_p_draw"] = probabilities[:, 1]
         tidy_predictions[f"{name}_p_away"] = probabilities[:, 2]
-    if args.split == "cross_season" and args.seed == 0:
+    # The corpus's primary split, not the literal "cross_season": that string does not exist on
+    # a single-season corpus, so gating on it left the Premier League bundle with no
+    # per-checkpoint predictions and a blank match-timeline chart.
+    if args.split == CORPORA[args.corpus].split_kinds[0] and args.seed == 0:
         out = paths.models / "module3_test_predictions.parquet"
         tidy_predictions.to_parquet(out, index=False)
         log.info("wrote %s", out)

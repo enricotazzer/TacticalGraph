@@ -22,14 +22,24 @@ sidebar_provenance()
 # Which competition this bundle holds, stated before any number is shown. Two corpora in this
 # project share a season key *and* a provider (Serie A 2015/16 and Premier League 2015/16 are
 # both statsbomb/2015-2016), so an unlabelled page would be genuinely ambiguous.
+_bundle = get_bundle()
+_is_premier_league = _bundle.manifest.get("corpus") == "premier_league"
 st.info(
-    f"**This demo shows the `{get_bundle().manifest.get('corpus', 'serie_a')}` corpus — "
-    f"{get_bundle().corpus_label()}.** The project runs Modules 1–4 on two corpora: the "
-    "**Premier League 2015/16** (380 matches, one provider, split by matchweek) is the primary "
-    "one because it has no provider confound, and **Serie A 2015/16 + 2017/18** (760 matches, "
-    "two providers) is kept as a cross-provider generalisation study. The Serie A bundle is "
-    "the one committed here because it is the only one that can drive the harmonisation page; "
-    "the Premier League numbers are in the README."
+    f"**This demo shows the `{_bundle.manifest.get('corpus', 'unknown')}` corpus — "
+    f"{_bundle.corpus_label()}.** The project runs Modules 1–4 on two corpora: the "
+    "**Premier League 2015/16** (380 matches, one provider, split by matchweek 1-26 / 27-33 / "
+    "34-38) is the primary one because it carries no provider confound, and **Serie A 2015/16 + "
+    "2017/18** (760 matches, two providers) is kept as a cross-provider generalisation study."
+    + (
+        "\n\nBecause this bundle has a single provider, the Module 1 harmonisation sections "
+        "are hidden rather than shown empty — there is no second annotation convention to "
+        "reconcile. Those results, and the cross-season stability tests, are in the README "
+        "and reproducible with `--corpus serie_a`."
+        if _is_premier_league
+        else "\n\nThis bundle has two providers, so the Module 1 harmonisation sections are "
+        "populated. Premier League results are in the README and reproducible with "
+        "`--corpus premier_league`."
+    )
 )
 
 # --------------------------------------------------------------------------------- status

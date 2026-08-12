@@ -1,0 +1,355 @@
+{
+  "split": {
+    "kind": "matchweek",
+    "description": "Premier League 2015/16: train=wk1-26, val=wk27-33, test=wk34-38 -- single provider, single season, no provider confound"
+  },
+  "ablation": [
+    {
+      "feature_set": "position",
+      "n_features": 4,
+      "train_acc": 0.8708,
+      "val_acc": 0.8415,
+      "test_acc": 0.8523,
+      "epochs_run": 27,
+      "resources": {
+        "name": "gnn-position",
+        "seconds": 117.49,
+        "peak_rss_mb": 734.1,
+        "gpu_peak_mb": 1.5,
+        "device": "mps (Apple Silicon)"
+      }
+    },
+    {
+      "feature_set": "topology",
+      "n_features": 10,
+      "train_acc": 0.785,
+      "val_acc": 0.7667,
+      "test_acc": 0.7597,
+      "epochs_run": 25,
+      "resources": {
+        "name": "gnn-topology",
+        "seconds": 111.41,
+        "peak_rss_mb": 778.0,
+        "gpu_peak_mb": 7.6,
+        "device": "mps (Apple Silicon)"
+      }
+    },
+    {
+      "feature_set": "both",
+      "n_features": 14,
+      "train_acc": 0.8915,
+      "val_acc": 0.8667,
+      "test_acc": 0.8612,
+      "epochs_run": 30,
+      "resources": {
+        "name": "gnn-both",
+        "seconds": 131.26,
+        "peak_rss_mb": 738.0,
+        "gpu_peak_mb": 12.4,
+        "device": "mps (Apple Silicon)"
+      }
+    }
+  ],
+  "feature_sets": {
+    "position": [
+      "mean_x",
+      "mean_y",
+      "spread_x",
+      "spread_y"
+    ],
+    "topology": [
+      "touches",
+      "passes_attempted",
+      "passes_completed",
+      "pass_completion_rate",
+      "degree_in_norm",
+      "degree_out_norm",
+      "strength_in_norm",
+      "strength_out_norm",
+      "edge_share_in",
+      "edge_share_out"
+    ],
+    "both": [
+      "mean_x",
+      "mean_y",
+      "spread_x",
+      "spread_y",
+      "touches",
+      "passes_attempted",
+      "passes_completed",
+      "pass_completion_rate",
+      "degree_in_norm",
+      "degree_out_norm",
+      "strength_in_norm",
+      "strength_out_norm",
+      "edge_share_in",
+      "edge_share_out"
+    ]
+  },
+  "clustering": [
+    {
+      "representation": "centrality (baseline)",
+      "k": 4,
+      "ari_coarse4": 0.0523,
+      "nmi_coarse4": 0.0995,
+      "silhouette": 0.2055,
+      "ari_fine24": 0.0368,
+      "nmi_fine24": 0.0818
+    },
+    {
+      "representation": "gnn-both",
+      "k": 4,
+      "ari_coarse4": 0.3777,
+      "nmi_coarse4": 0.4848,
+      "silhouette": 0.3465,
+      "ari_fine24": 0.13,
+      "nmi_fine24": 0.3581
+    },
+    {
+      "representation": "gnn-position",
+      "k": 4,
+      "ari_coarse4": 0.6193,
+      "nmi_coarse4": 0.6359,
+      "silhouette": 0.3171,
+      "ari_fine24": 0.2136,
+      "nmi_fine24": 0.4475
+    },
+    {
+      "representation": "gnn-topology",
+      "k": 4,
+      "ari_coarse4": 0.3036,
+      "nmi_coarse4": 0.3487,
+      "silhouette": 0.3049,
+      "ari_fine24": 0.1036,
+      "nmi_fine24": 0.2527
+    },
+    {
+      "representation": "centrality (baseline)",
+      "k": 6,
+      "ari_coarse4": 0.0329,
+      "nmi_coarse4": 0.0866,
+      "silhouette": 0.1843,
+      "ari_fine24": 0.0413,
+      "nmi_fine24": 0.0779
+    },
+    {
+      "representation": "gnn-both",
+      "k": 6,
+      "ari_coarse4": 0.4503,
+      "nmi_coarse4": 0.57,
+      "silhouette": 0.2941,
+      "ari_fine24": 0.3218,
+      "nmi_fine24": 0.5207
+    },
+    {
+      "representation": "gnn-position",
+      "k": 6,
+      "ari_coarse4": 0.4328,
+      "nmi_coarse4": 0.542,
+      "silhouette": 0.3646,
+      "ari_fine24": 0.3047,
+      "nmi_fine24": 0.5048
+    },
+    {
+      "representation": "gnn-topology",
+      "k": 6,
+      "ari_coarse4": 0.3176,
+      "nmi_coarse4": 0.3529,
+      "silhouette": 0.2651,
+      "ari_fine24": 0.1178,
+      "nmi_fine24": 0.269
+    },
+    {
+      "representation": "centrality (baseline)",
+      "k": 8,
+      "ari_coarse4": 0.0288,
+      "nmi_coarse4": 0.0853,
+      "silhouette": 0.1673,
+      "ari_fine24": 0.0383,
+      "nmi_fine24": 0.0816
+    },
+    {
+      "representation": "gnn-both",
+      "k": 8,
+      "ari_coarse4": 0.3718,
+      "nmi_coarse4": 0.5259,
+      "silhouette": 0.2697,
+      "ari_fine24": 0.3504,
+      "nmi_fine24": 0.4987
+    },
+    {
+      "representation": "gnn-position",
+      "k": 8,
+      "ari_coarse4": 0.3701,
+      "nmi_coarse4": 0.5124,
+      "silhouette": 0.3601,
+      "ari_fine24": 0.3534,
+      "nmi_fine24": 0.527
+    },
+    {
+      "representation": "gnn-topology",
+      "k": 8,
+      "ari_coarse4": 0.2928,
+      "nmi_coarse4": 0.3383,
+      "silhouette": 0.2198,
+      "ari_fine24": 0.127,
+      "nmi_fine24": 0.2668
+    },
+    {
+      "representation": "centrality (baseline)",
+      "k": 10,
+      "ari_coarse4": 0.0301,
+      "nmi_coarse4": 0.0876,
+      "silhouette": 0.1543,
+      "ari_fine24": 0.0427,
+      "nmi_fine24": 0.0881
+    },
+    {
+      "representation": "gnn-both",
+      "k": 10,
+      "ari_coarse4": 0.3173,
+      "nmi_coarse4": 0.4967,
+      "silhouette": 0.2797,
+      "ari_fine24": 0.4063,
+      "nmi_fine24": 0.5291
+    },
+    {
+      "representation": "gnn-position",
+      "k": 10,
+      "ari_coarse4": 0.3139,
+      "nmi_coarse4": 0.4868,
+      "silhouette": 0.3502,
+      "ari_fine24": 0.4113,
+      "nmi_fine24": 0.5495
+    },
+    {
+      "representation": "gnn-topology",
+      "k": 10,
+      "ari_coarse4": 0.2894,
+      "nmi_coarse4": 0.3368,
+      "silhouette": 0.2077,
+      "ari_fine24": 0.1382,
+      "nmi_fine24": 0.2735
+    },
+    {
+      "representation": "centrality (baseline)",
+      "k": 12,
+      "ari_coarse4": 0.0416,
+      "nmi_coarse4": 0.1106,
+      "silhouette": 0.1539,
+      "ari_fine24": 0.0547,
+      "nmi_fine24": 0.1081
+    },
+    {
+      "representation": "gnn-both",
+      "k": 12,
+      "ari_coarse4": 0.2962,
+      "nmi_coarse4": 0.48,
+      "silhouette": 0.2699,
+      "ari_fine24": 0.4279,
+      "nmi_fine24": 0.5232
+    },
+    {
+      "representation": "gnn-position",
+      "k": 12,
+      "ari_coarse4": 0.29,
+      "nmi_coarse4": 0.4663,
+      "silhouette": 0.341,
+      "ari_fine24": 0.4368,
+      "nmi_fine24": 0.5371
+    },
+    {
+      "representation": "gnn-topology",
+      "k": 12,
+      "ari_coarse4": 0.195,
+      "nmi_coarse4": 0.3161,
+      "silhouette": 0.173,
+      "ari_fine24": 0.1501,
+      "nmi_fine24": 0.2775
+    }
+  ],
+  "within_player_consistency": [
+    {
+      "representation": "centrality (baseline)",
+      "n_players": 400,
+      "same_player_cosine": 0.3523,
+      "diff_player_cosine": 0.0094,
+      "lift": 0.3429
+    },
+    {
+      "representation": "gnn-position",
+      "n_players": 400,
+      "same_player_cosine": 0.6826,
+      "diff_player_cosine": 0.0211,
+      "lift": 0.6615
+    },
+    {
+      "representation": "gnn-topology",
+      "n_players": 400,
+      "same_player_cosine": 0.4849,
+      "diff_player_cosine": 0.0219,
+      "lift": 0.463
+    },
+    {
+      "representation": "gnn-both",
+      "n_players": 400,
+      "same_player_cosine": 0.6863,
+      "diff_player_cosine": 0.0199,
+      "lift": 0.6664
+    }
+  ],
+  "stability_kind": "half_season",
+  "stability": [
+    {
+      "representation": "centrality (baseline)",
+      "n_players": 383,
+      "matched_cosine": 0.7059,
+      "shuffled_cosine": 0.0141,
+      "lift": 0.6918
+    },
+    {
+      "representation": "gnn-position",
+      "n_players": 383,
+      "matched_cosine": 0.8899,
+      "shuffled_cosine": 0.0708,
+      "lift": 0.8191
+    },
+    {
+      "representation": "gnn-topology",
+      "n_players": 383,
+      "matched_cosine": 0.8087,
+      "shuffled_cosine": 0.062,
+      "lift": 0.7466
+    },
+    {
+      "representation": "gnn-both",
+      "n_players": 383,
+      "matched_cosine": 0.8992,
+      "shuffled_cosine": 0.0556,
+      "lift": 0.8436
+    }
+  ],
+  "resources": [
+    {
+      "name": "gnn-position",
+      "seconds": 117.49,
+      "peak_rss_mb": 734.1,
+      "gpu_peak_mb": 1.5,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "gnn-topology",
+      "seconds": 111.41,
+      "peak_rss_mb": 778.0,
+      "gpu_peak_mb": 7.6,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "gnn-both",
+      "seconds": 131.26,
+      "peak_rss_mb": 738.0,
+      "gpu_peak_mb": 12.4,
+      "device": "mps (Apple Silicon)"
+    }
+  ]
+}

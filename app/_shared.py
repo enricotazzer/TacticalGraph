@@ -53,17 +53,22 @@ class Phase:
 # Single source of truth for what is and is not implemented. Pages read this so the status
 # shown on a page can never contradict the status shown on the home page.
 PHASES: tuple[Phase, ...] = (
+    # Blurbs stay corpus-neutral: this table is shown for whichever bundle is loaded, so a
+    # figure quoted here (760 matches, 4.8x lift) would be wrong on the other corpus. Exact
+    # numbers belong on the module pages, which read them from that bundle's own reports.
     Phase(1, "Data ingestion & graph representation", True,
-          "760 matches, two providers, harmonised into SPADL; passing networks built."),
+          "Provider data harmonised into SPADL; passing networks built per team-match and per "
+          "15-minute window."),
     Phase(2, "Player centrality & functional role", True,
           "Classical centrality baseline plus GraphSAGE role embeddings, with ablations."),
     Phase(3, "Match result prediction (GNN + Transformer)", True,
-          "Baseline ladder built and beaten by B1; the graph model loses to B0 — reported as a "
+          "Baseline ladder built; the graph model loses to B0 on every corpus — reported as a "
           "negative result."),
     Phase(4, "Recurring tactical patterns", True,
-          "Chains clustered two ways; shot lift up to 4.8x over base. Human review pending."),
+          "Chains clustered two ways; the interpretable baseline beats the learned encoder. "
+          "Human review pending."),
     Phase(5, "Tactical simulation (RL pass choice)", False,
-          "Blocked on 360 data, which Serie A does not have in either season."),
+          "Blocked on 360 data, which neither corpus has on any match."),
     Phase(6, "Coach-facing dashboard", False,
           "This app is its skeleton."),
 )

@@ -1,4 +1,4 @@
-"""Module 5 — RL pass choice. SPECIFICATION only; blocked on data Serie A does not have."""
+"""Module 5 — RL pass choice. SPECIFICATION only; blocked on 360 data neither corpus has."""
 
 from __future__ import annotations
 
@@ -18,10 +18,11 @@ sidebar_provenance()
 status_banner(5)
 
 st.error(
-    "**Serie A has no 360 freeze-frame data in either season.** Neither StatsBomb 2015/16 nor "
-    "Wyscout 2017/18 includes player positions off the ball. This module therefore cannot run "
-    "on the project's corpus at all — it needs a different competition, and that departs from "
-    "the Serie A framing the rest of the project maintains."
+    "**Neither corpus has 360 freeze-frame data.** Premier League 2015/16 has 0 of 380 matches; "
+    "Serie A has none in either season (StatsBomb 2015/16 or Wyscout 2017/18). None of them "
+    "records player positions off the ball, so this module cannot run on the project's data at "
+    "all — it needs a different competition, which departs from the league framing the rest of "
+    "the project maintains."
 )
 
 st.subheader("The formulation")
@@ -60,7 +61,7 @@ with left:
         "during planning. Alternatives with full 360 coverage: World Cup 2022 (64 matches), "
         "Women's World Cup 2023 (64), Euro 2020 (51).\n\n"
         "Cost: a tournament has no home/away symmetry, no league table, and heterogeneous "
-        "opponents — so nothing from this module transfers back to the Serie A analysis."
+        "opponents — so nothing from this module transfers back to the league analysis."
     )
 with right:
     st.markdown("**2. Freeze-frames are anonymous and partial**")

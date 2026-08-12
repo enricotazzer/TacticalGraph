@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 import torch
 
+from tacticalgraph.config import CORPORA
 from tacticalgraph.demo.bundle import (
     BUNDLE_DIR,
     BundleMissingError,
@@ -57,12 +58,22 @@ def test_manifest_records_provenance(bundle: DemoBundle):
 
 
 def test_core_tables_present_and_joinable(bundle: DemoBundle):
-    """Node and edge tables must share the keys the app joins them on."""
+    """Node and edge tables must share the keys the app joins them on.
+
+    Counts are checked against the *declared corpus* rather than hardcoded: the bundle can
+    hold either corpus, and a fixed 760 would fail on the Premier League while telling us
+    nothing about whether the bundle is self-consistent.
+    """
     keys = {"game_id", "team_id", "season", "provider"}
     assert keys <= set(bundle.nodes.columns)
     assert keys <= set(bundle.edges.columns)
-    assert len(bundle.games) == 760
-    assert bundle.nodes["season"].nunique() == 2
+
+    spec = CORPORA[bundle.manifest["corpus"]]
+    assert len(bundle.games) == spec.n_matches_expected
+    assert bundle.games["provider"].nunique() == len({s.provider for s in spec.seasons})
+    assert bundle.nodes["season"].nunique() == len(spec.seasons)
+    # Every node's match must exist in the games index, or the app's joins drop rows silently.
+    assert set(bundle.nodes["game_id"]) <= set(bundle.games["game_id"])
 
 
 def test_embeddings_align_with_players(bundle: DemoBundle):
@@ -143,18 +154,35 @@ def test_windowed_sample_has_full_sequences(bundle: DemoBundle):
     assert "window_index" in nodes.columns
     per_match = nodes.groupby("game_id")["window_index"].nunique()
     assert per_match.max() == 16, f"expected 16 windows per match, saw {per_match.max()}"
-    assert nodes["season"].nunique() == 2, "sample should cover both providers"
+    spec = CORPORA[bundle.manifest["corpus"]]
+    assert nodes["season"].nunique() == len(spec.seasons), (
+        "windowed sample should cover every season the corpus declares"
+    )
 
 
 def test_reports_carry_the_published_metrics(bundle: DemoBundle):
     reports = bundle.reports()
-    assert "harmonization_report" in reports
-    harmonisation = reports["harmonization_report"]
-    for section in ("recipient_accuracy", "possession", "distribution_shift", "action_mix"):
-        assert section in harmonisation, f"missing {section}"
 
-    accuracy = pd.DataFrame(harmonisation["recipient_accuracy"])
-    native = accuracy[accuracy["context"] == "statsbomb-native"]["accuracy"].iloc[0]
-    assert native > 0.99, f"recipient accuracy regressed to {native}"
+    # The harmonisation report only exists for a multi-provider corpus -- it *is* the
+    # cross-provider comparison. Requiring it unconditionally would demand a measurement that
+    # is undefined on a single-provider corpus.
+    spec = CORPORA[bundle.manifest["corpus"]]
+    providers = {season.provider for season in spec.seasons}
+    if len(providers) > 1:
+        assert "harmonization_report" in reports
+        harmonisation = reports["harmonization_report"]
+        for section in ("recipient_accuracy", "possession", "distribution_shift", "action_mix"):
+            assert section in harmonisation, f"missing {section}"
+
+        accuracy = pd.DataFrame(harmonisation["recipient_accuracy"])
+        native = accuracy[accuracy["context"] == "statsbomb-native"]["accuracy"].iloc[0]
+        assert native > 0.99, f"recipient accuracy regressed to {native}"
+    else:
+        assert "harmonization_report" not in reports, (
+            "a single-provider bundle must not ship a cross-provider harmonisation report -- "
+            "it would be describing a different corpus"
+        )
 
     assert any(k.startswith("module2_roles_") for k in reports), "no Module 2 report in bundle"
+    assert any(k.startswith("module3_outcome_") for k in reports), "no Module 3 report"
+    assert any(k.startswith("module4_patterns_") for k in reports), "no Module 4 report"

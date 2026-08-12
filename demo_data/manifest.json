@@ -1,96 +1,96 @@
 {
-  "generated_at": "2026-08-12T10:21:38+00:00",
-  "git_sha": "f8b009c",
-  "source": "/Volumes/T7/tacticalgraph/corpora/serie_a",
-  "corpus": "serie_a",
-  "corpus_label": "Serie A 2015/16 + 2017/18",
-  "corpus_notes": "Two providers by necessity: StatsBomb open data has exactly one usable Serie A season. Retained as a cross-provider generalisation study.",
+  "generated_at": "2026-08-12T14:56:45+00:00",
+  "git_sha": "c651f32",
+  "source": "/Volumes/T7/tacticalgraph/corpora/premier_league",
+  "corpus": "premier_league",
+  "corpus_label": "Premier League 2015/16",
+  "corpus_notes": "Complete 380-match single-provider season. No provider confound; split by matchweek. No 360 data on any match.",
   "tables": {
     "games.parquet": {
-      "rows": 760,
+      "rows": 380,
       "columns": 14,
-      "size_kb": 21.2,
+      "size_kb": 15.0,
       "source": "spadl/games.parquet"
     },
     "players.parquet": {
-      "rows": 1083,
+      "rows": 547,
       "columns": 8,
-      "size_kb": 30.2,
+      "size_kb": 21.2,
       "source": "spadl/players.parquet"
     },
     "teams.parquet": {
-      "rows": 40,
-      "columns": 5,
-      "size_kb": 4.4,
+      "rows": 20,
+      "columns": 4,
+      "size_kb": 3.2,
       "source": "spadl/teams.parquet"
     },
     "full_nodes.parquet": {
-      "rows": 19335,
+      "rows": 9267,
       "columns": 14,
-      "size_kb": 850.3,
+      "size_kb": 414.4,
       "source": "networks/full_nodes.parquet"
     },
     "full_edges.parquet": {
-      "rows": 150879,
+      "rows": 73800,
       "columns": 10,
-      "size_kb": 2324.6,
+      "size_kb": 1265.5,
       "source": "networks/full_edges.parquet"
     },
     "centrality_players.parquet": {
-      "rows": 19335,
+      "rows": 9267,
       "columns": 15,
-      "size_kb": 889.4,
+      "size_kb": 430.6,
       "source": "networks/centrality_players.parquet"
     },
     "centrality_player_season.parquet": {
-      "rows": 876,
+      "rows": 419,
       "columns": 16,
-      "size_kb": 90.7,
+      "size_kb": 50.4,
       "source": "networks/centrality_player_season.parquet"
     },
     "centrality_teams.parquet": {
-      "rows": 1520,
+      "rows": 760,
       "columns": 10,
-      "size_kb": 38.7,
+      "size_kb": 23.6,
       "source": "networks/centrality_teams.parquet"
     },
     "role_embeddings.parquet": {
-      "rows": 18701,
+      "rows": 9267,
       "columns": 38,
-      "size_kb": 3574.8,
+      "size_kb": 1741.2,
       "source": "models/role_embeddings.parquet"
     },
     "module3_test_predictions.parquet": {
-      "rows": 6080,
+      "rows": 800,
       "columns": 16,
-      "size_kb": 244.0,
+      "size_kb": 45.1,
       "source": "models/module3_test_predictions.parquet"
     },
     "module4_chains_sample.parquet": {
-      "rows": 22614,
+      "rows": 21327,
       "columns": 26,
-      "size_kb": 1454.4,
+      "size_kb": 1337.1,
       "source": "models/module4_chains.parquet (stratified sample)",
-      "full_rows": 109912
+      "full_rows": 52957
     },
     "windowed_sample_nodes.parquet": {
-      "rows": 7352,
+      "rows": 3609,
       "columns": 14,
-      "size_kb": 263.2,
+      "size_kb": 143.2,
       "source": "networks/windowed_*.parquet (subsampled)",
-      "matches": 20
+      "matches": 10
     },
     "windowed_sample_edges.parquet": {
-      "rows": 25582,
+      "rows": 13044,
       "columns": 10,
-      "size_kb": 293.5,
+      "size_kb": 154.0,
       "source": "networks/windowed_*.parquet (subsampled)",
-      "matches": 20
+      "matches": 10
     }
   },
   "files": {
     "role_gnn_both.pt": {
-      "size_kb": 28.8,
+      "size_kb": 28.7,
       "source": "models/role_gnn_both.pt"
     },
     "chain_encoder.pt": {
@@ -99,23 +99,14 @@
     }
   },
   "reports": [
-    "harmonization_report.json",
-    "module2_roles_cross_season.json",
-    "module2_roles_cross_season_seed0.json",
-    "module2_roles_cross_season_seed1.json",
-    "module2_roles_cross_season_seed2.json",
-    "module2_roles_within_season.json",
-    "module2_roles_within_season_seed0.json",
-    "module2_roles_within_season_seed1.json",
-    "module2_roles_within_season_seed2.json",
-    "module3_outcome_cross_season_seed0.json",
-    "module3_outcome_cross_season_seed1.json",
-    "module3_outcome_cross_season_seed2.json",
-    "module3_outcome_within_season_seed0.json",
-    "module3_outcome_within_season_seed1.json",
-    "module3_outcome_within_season_seed2.json",
-    "module4_patterns_cross_season.json",
-    "module4_patterns_within_season.json",
+    "module2_roles_matchweek_seed0.json",
+    "module2_roles_matchweek_seed1.json",
+    "module2_roles_matchweek_seed2.json",
+    "module3_ceiling.json",
+    "module3_outcome_matchweek_seed0.json",
+    "module3_outcome_matchweek_seed1.json",
+    "module3_outcome_matchweek_seed2.json",
+    "module4_patterns_matchweek.json",
     "pattern_review_sheet_gru-autoencoder.csv",
     "pattern_review_sheet_hand-crafted.csv"
   ]

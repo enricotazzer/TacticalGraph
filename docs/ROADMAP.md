@@ -20,9 +20,29 @@ re-litigated later. Data availability is documented separately in
 Result prediction and tactical pattern discovery are built on both corpora; see the README.
 Findings worth carrying forward:
 
-- **Module 3's GNN+Transformer loses to B0.** 300 (Serie A) / 260 (PL) independent training
-  matches cannot support a sequence model. The fix is more data — more competitions, or a
-  provider licence — not a different architecture.
+- **Module 3's GNN+Transformer loses to B0, and "not enough data" is NOT the explanation.**
+  `scripts/estimate_ceiling.py` measured it: B0 **plateaus** by ~280 training matches (doubling
+  to 560 moves it −0.002 to −0.004, inside subsample noise), and the total headroom below B0 is
+  only **~0.037** log-loss (B1 at 560 matches reaches 0.709 against B0's 0.746 on Serie A). The
+  GNN's deficit is **+0.15 to +0.24** — four to six times the entire available headroom.
+
+  So more data cannot rescue it. An earlier version of this file claimed the opposite; that
+  claim was wrong and is retracted. The remaining suspects are optimisation and formulation:
+
+  1. **Batch size is effectively 1** — `optimiser.step()` fires once per match inside the
+     training loop, ~260-300 noisy updates per epoch with no gradient accumulation. Best
+     validation epoch is 0 or 1 in 6 of 8 runs across both corpora, which is what a model that
+     never receives a usable gradient looks like.
+  2. **The loss weights all 16 checkpoints equally**, so the model is penalised as hard for not
+     knowing the result at minute 15 (near-irreducible) as at minute 90 (nearly determined).
+  3. **`state_head` is a parallel linear path, not a residual on a fitted baseline.** The model
+     must rediscover the tabular baseline by gradient descent instead of starting from it. Fit
+     B1 first, freeze it, and predict a correction to its logits — then "learn nothing" means
+     "match B1" rather than "fail".
+
+  Also measured: **pooling corpora is safe and mildly helpful** (B0 −0.005 to −0.011, B1 −0.017
+  on the Premier League fold, B2 −0.17 to −0.23), so cross-provider training needs no domain
+  adaptation to be worth doing.
 - **Module 2's topology contribution is near zero and shrinks on the cleaner corpus**
   (+0.25 pp on the Premier League vs ~1.1–1.5 pp on Serie A). Position features carry the
   signal; graph topology adds almost nothing for role identification.

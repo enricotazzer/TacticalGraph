@@ -52,8 +52,9 @@ st.markdown(
 st.subheader("What event data cannot see")
 st.markdown(
     "Off-ball movement, verbal communication, coaching instruction and tactical intent are not "
-    "in this data. Even with 360 freeze-frames the representation is partial — and Serie A has "
-    "no 360 in either season. No amount of modelling recovers what was never recorded."
+    "in this data. Even with 360 freeze-frames the representation is partial (a real frame "
+    "holds a mean of 14.9 of 22 players, never all 22) — and neither corpus has 360 on any "
+    "match. No amount of modelling recovers what was never recorded."
 )
 
 st.divider()

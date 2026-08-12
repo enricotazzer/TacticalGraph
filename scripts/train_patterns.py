@@ -220,7 +220,11 @@ def main() -> int:
     destination.write_text(json.dumps(report, indent=2, default=str))
     print(f"\nwrote {destination}")
 
-    if args.split == "cross_season":
+    # Written for the corpus's *primary* split rather than the literal "cross_season", which
+    # only exists on a two-season corpus -- gating on the string meant a single-season corpus
+    # produced a report but no chain table, and the demo bundle then silently lost its
+    # pattern-browsing page.
+    if args.split == CORPORA[args.corpus].split_kinds[0]:
         keep = [
             "game_id", "possession_id", "season", "provider", "team_id", "fold",
             "start_minute", "end_minute", "period_id", "n_actions", "duration_seconds",

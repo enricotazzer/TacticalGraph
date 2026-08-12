@@ -30,7 +30,8 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch_geometric.nn import SAGEConv
+from torch_geometric.data import Batch, Data
+from torch_geometric.nn import SAGEConv, global_mean_pool
 
 from tacticalgraph.features.match_state import B1_FEATURES
 from tacticalgraph.models.role_gnn import TOPOLOGY_FEATURES, engineer_node_features
@@ -77,6 +78,27 @@ class WindowGraphEncoder(nn.Module):
         h = F.relu(self.conv1(x, edge_index))
         h = self.conv2(h, edge_index)
         return h.mean(dim=0)  # graph-level vector
+
+    def forward_pooled(
+        self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor, n_graphs: int
+    ) -> torch.Tensor:
+        """Encode many disjoint graphs in one pass and mean-pool each separately.
+
+        Mathematically identical to calling `forward` per graph -- SAGEConv only aggregates
+        along edges, and a `Batch` introduces none between its members -- but it replaces
+        `n_graphs` kernel launches with one. With 16 windows x 2 teams per match, the
+        per-graph version spent nearly all its time in launch overhead on ~11-node graphs.
+
+        `size=n_graphs` matters: an empty window (a team with no completed passes in it) has
+        no rows in `batch`, and without an explicit size the output would silently be shorter
+        than the number of graphs and every subsequent reshape would misalign. With it, empty
+        graphs pool to zero, matching `forward`'s explicit empty case.
+        """
+        if x.numel() == 0:
+            return torch.zeros(n_graphs, self.out_channels, device=x.device)
+        h = F.relu(self.conv1(x, edge_index))
+        h = self.conv2(h, edge_index)
+        return global_mean_pool(h, batch, size=n_graphs)
 
 
 def causal_mask(size: int, device: torch.device | str = "cpu") -> torch.Tensor:
@@ -149,15 +171,50 @@ class OutcomeGNNTransformer(nn.Module):
             tokens.append(torch.cat([home_vec, away_vec, state]))
         return self.project(torch.stack(tokens))
 
-    def forward(self, sequence: MatchSequence, device: str = "cpu") -> torch.Tensor:
-        tokens = self.encode_tokens(sequence, device=device) + self.positions
+    def forward_batch(
+        self, sequences: list[MatchSequence], device: str = "cpu"
+    ) -> torch.Tensor:
+        """Logits for a minibatch of matches: (n_matches, 16, 3).
+
+        This is the only implementation; `forward` wraps it for a single sequence, so the
+        batched and unbatched paths cannot drift apart.
+        """
+        n_matches = len(sequences)
+        graphs = []
+        for sequence in sequences:
+            for window in range(N_WINDOWS):
+                # Order matters and is relied on by the reshape below:
+                # match-major, then window, then (home, away).
+                for side in (sequence.home_graphs, sequence.away_graphs):
+                    x, edge_index = side[window]
+                    graphs.append(
+                        Data(
+                            x=torch.as_tensor(x, dtype=torch.float32),
+                            edge_index=torch.as_tensor(edge_index, dtype=torch.long),
+                        )
+                    )
+        n_graphs = len(graphs)
+        batch = Batch.from_data_list(graphs).to(device)
+        pooled = self.encoder.forward_pooled(
+            batch.x, batch.edge_index, batch.batch, n_graphs
+        )
+        # (n_matches, 16, 2, graph_out) -> home/away vectors per window
+        pooled = pooled.view(n_matches, N_WINDOWS, 2, -1)
+        home_vectors, away_vectors = pooled[:, :, 0], pooled[:, :, 1]
+
+        state = torch.as_tensor(
+            np.stack([s.state for s in sequences]), dtype=torch.float32, device=device
+        )
+        tokens = self.project(torch.cat([home_vectors, away_vectors, state], dim=-1))
         encoded = self.transformer(
-            tokens.unsqueeze(0), mask=causal_mask(N_WINDOWS, device=device)
-        ).squeeze(0)
-        state = torch.as_tensor(sequence.state, dtype=torch.float32, device=device)
+            tokens + self.positions, mask=causal_mask(N_WINDOWS, device=device)
+        )
         # Scalar state is per-timestep and already causal by construction, so adding it here
         # cannot leak the future.
-        return self.head(encoded) + self.state_head(state)  # (16, 3)
+        return self.head(encoded) + self.state_head(state)  # (n_matches, 16, 3)
+
+    def forward(self, sequence: MatchSequence, device: str = "cpu") -> torch.Tensor:
+        return self.forward_batch([sequence], device=device).squeeze(0)  # (16, 3)
 
 
 # --------------------------------------------------------------------------------------
@@ -289,6 +346,7 @@ def train_outcome_model(
     n_heads: int = 2,
     n_layers: int = 1,
     dropout: float = 0.4,
+    batch_size: int = 16,
 ) -> tuple[OutcomeGNNTransformer, dict[str, list[float]]]:
     """Train with early stopping on validation log-loss.
 
@@ -296,11 +354,20 @@ def train_outcome_model(
     and a draw class that is barely predictable, accuracy plateaus while calibration is still
     changing, and calibration is what this module reports.
 
+    **`batch_size` is the substantive knob here.** The original loop called
+    `optimiser.step()` once per match, i.e. batch size 1: ~260-300 updates per epoch, each
+    from a single match's heavily-correlated 16 checkpoints. Across eight seeded runs on two
+    corpora the best validation epoch was 0, 1, 1, 0, 1, 4, 17, 3 -- the model was almost
+    never better than initialisation-plus-one-step, which is what an optimiser fed pure
+    gradient noise looks like. `batch_size=1` reproduces that behaviour exactly, so the
+    before/after comparison is a single flag.
+
     The defaults were set from the *validation* curve, never the test set. An earlier run at
     lr=1e-3 / patience=8 oscillated violently between epochs (val log-loss 0.81 -> 1.16 ->
     0.89 -> 1.25) and stopped at epoch 9 with its best score at epoch 0, while training loss
-    was still falling -- classic too-high learning rate plus a patience budget consumed by
-    noise on an 80-match validation fold.
+    was still falling. Note that a learning rate tuned for batch size 1 is not the right one
+    for batch size 16 -- averaging over 16 matches shrinks each step -- so `lr` belongs in the
+    validation sweep whenever `batch_size` changes.
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -323,21 +390,24 @@ def train_outcome_model(
     for epoch in range(epochs):
         model.train()
         order = rng.permutation(len(train))
-        total = 0.0
-        for index in order:
-            sequence = train[index]
+        total, n_batches = 0.0, 0
+        for start in range(0, len(order), batch_size):
+            chunk = [train[i] for i in order[start : start + batch_size]]
             optimiser.zero_grad()
-            logits = model(sequence, device=device)
-            target = torch.full(
-                (N_WINDOWS,), sequence.label, dtype=torch.long, device=device
+            logits = model.forward_batch(chunk, device=device)  # (B, 16, 3)
+            target = torch.tensor(
+                [s.label for s in chunk], dtype=torch.long, device=device
+            ).unsqueeze(1).expand(-1, N_WINDOWS)
+            loss = F.cross_entropy(
+                logits.reshape(-1, logits.shape[-1]), target.reshape(-1)
             )
-            loss = F.cross_entropy(logits, target)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimiser.step()
             total += float(loss)
+            n_batches += 1
 
-        train_loss = total / max(len(train), 1)
+        train_loss = total / max(n_batches, 1)
         val_loss = evaluate_loss(model, val, device=device)
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
@@ -358,34 +428,55 @@ def train_outcome_model(
 
 @torch.no_grad()
 def evaluate_loss(
-    model: OutcomeGNNTransformer, sequences: list[MatchSequence], device: str = "cpu"
+    model: OutcomeGNNTransformer,
+    sequences: list[MatchSequence],
+    device: str = "cpu",
+    batch_size: int = 32,
 ) -> float:
+    """Mean per-match cross-entropy.
+
+    Batched in chunks and weighted by chunk size, so the result is identical to the
+    per-sequence mean regardless of `batch_size` (a plain mean of chunk means would be wrong
+    whenever the last chunk is short).
+    """
     model.eval()
-    total = 0.0
-    for sequence in sequences:
-        logits = model(sequence, device=device)
-        target = torch.full((N_WINDOWS,), sequence.label, dtype=torch.long, device=device)
-        total += float(F.cross_entropy(logits, target))
-    return total / max(len(sequences), 1)
+    total, n = 0.0, 0
+    for start in range(0, len(sequences), batch_size):
+        chunk = sequences[start : start + batch_size]
+        logits = model.forward_batch(chunk, device=device)
+        target = torch.tensor(
+            [s.label for s in chunk], dtype=torch.long, device=device
+        ).unsqueeze(1).expand(-1, N_WINDOWS)
+        loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), target.reshape(-1))
+        total += float(loss) * len(chunk)
+        n += len(chunk)
+    return total / max(n, 1)
 
 
 @torch.no_grad()
 def predict_proba(
-    model: OutcomeGNNTransformer, sequences: list[MatchSequence], device: str = "cpu"
+    model: OutcomeGNNTransformer,
+    sequences: list[MatchSequence],
+    device: str = "cpu",
+    batch_size: int = 32,
 ) -> pd.DataFrame:
     """Per (game, window) class probabilities, tidy so they can be joined to the state table."""
     model.eval()
     rows = []
-    for sequence in sequences:
-        probabilities = F.softmax(model(sequence, device=device), dim=1).cpu().numpy()
-        for window in range(N_WINDOWS):
-            rows.append(
-                {
-                    "game_id": sequence.game_id,
-                    "window_index": window,
-                    "p_home_win": probabilities[window, 0],
-                    "p_draw": probabilities[window, 1],
-                    "p_away_win": probabilities[window, 2],
-                }
-            )
+    for start in range(0, len(sequences), batch_size):
+        chunk = sequences[start : start + batch_size]
+        probabilities = F.softmax(
+            model.forward_batch(chunk, device=device), dim=-1
+        ).cpu().numpy()
+        for position, sequence in enumerate(chunk):
+            for window in range(N_WINDOWS):
+                rows.append(
+                    {
+                        "game_id": sequence.game_id,
+                        "window_index": window,
+                        "p_home_win": probabilities[position, window, 0],
+                        "p_draw": probabilities[position, window, 1],
+                        "p_away_win": probabilities[position, window, 2],
+                    }
+                )
     return pd.DataFrame(rows)
