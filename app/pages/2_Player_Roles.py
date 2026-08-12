@@ -56,8 +56,11 @@ def _module2_reports() -> dict[str, list[dict]]:
                 clustering.append({**row, "split": split})
             for row in payload.get("within_player_consistency", []):
                 consistency.append({**row, "split": split})
-            for row in payload.get("cross_season_stability", []):
-                stability.append({**row, "split": split})
+            # `stability` is the current key; `cross_season_stability` is what reports written
+            # before the corpus refactor used. Both are read so an older bundle still renders.
+            kind = payload.get("stability_kind", "cross_season")
+            for row in payload.get("stability", payload.get("cross_season_stability", [])):
+                stability.append({**row, "split": split, "stability_kind": kind})
     return {
         "ablation": ablation,
         "clustering": clustering,
@@ -68,6 +71,23 @@ def _module2_reports() -> dict[str, list[dict]]:
 
 data = _module2_reports()
 ablation = pd.DataFrame(data["ablation"])
+
+
+def primary_split(frame: pd.DataFrame) -> str | None:
+    """The split whose detail tables are shown.
+
+    Not hardcoded to "cross_season": that split only exists on a two-season corpus, and on the
+    Premier League corpus the only kind is "matchweek". Preference order puts the confounded
+    split first when it exists, because the within-season control is meant to be read *against*
+    it rather than instead of it.
+    """
+    if frame.empty or "split" not in frame:
+        return None
+    available = list(frame["split"].unique())
+    for preferred in ("cross_season", "matchweek", "within_season"):
+        if preferred in available:
+            return preferred
+    return available[0]
 
 st.subheader("The leakage trap, and the ablation that addresses it")
 st.markdown(
@@ -110,7 +130,9 @@ if not ablation.empty:
 clustering = pd.DataFrame(data["clustering"])
 st.subheader("GNN embedding vs classical centrality")
 if not clustering.empty:
-    cross = clustering[clustering["split"] == "cross_season"]
+    shown_split = primary_split(clustering)
+    cross = clustering[clustering["split"] == shown_split]
+    st.caption(f"Split shown: `{shown_split}`")
     k_choice = st.select_slider("Clusters (k)", sorted(cross["k"].unique()), value=4)
     subset = cross[cross["k"] == k_choice].drop(columns=["split", "k"])
     subset = subset.rename(
@@ -135,7 +157,7 @@ with col_a:
     consistency = pd.DataFrame(data["consistency"])
     if not consistency.empty:
         st.markdown("**Within-player consistency** — same player, different matches")
-        display = consistency[consistency["split"] == "cross_season"][
+        display = consistency[consistency["split"] == primary_split(consistency)][
             ["representation", "same_player_cosine", "diff_player_cosine", "lift"]
         ]
         display.columns = ["Representation", "same player", "different player", "lift"]
@@ -143,13 +165,26 @@ with col_a:
 with col_b:
     stability = pd.DataFrame(data["stability"])
     if not stability.empty:
-        st.markdown("**Cross-season stability** — 199 players matched across providers")
-        display = stability[stability["split"] == "cross_season"][
-            ["representation", "matched_cosine", "shuffled_cosine", "lift"]
-        ]
+        rows = stability[stability["split"] == primary_split(stability)]
+        # Two different measures share this slot depending on the corpus: across providers on a
+        # two-season corpus, across halves of one season otherwise. Labelling them the same
+        # would misdescribe whichever one is actually shown.
+        half_season = (rows["stability_kind"] == "half_season").any()
+        if half_season:
+            st.markdown("**Half-season stability** — same player, weeks 1-19 vs 20-38")
+        else:
+            st.markdown("**Cross-season stability** — players matched across providers")
+        display = rows[["representation", "matched_cosine", "shuffled_cosine", "lift"]]
         display.columns = ["Representation", "matched", "shuffled", "lift"]
         st.dataframe(display, hide_index=True, width="stretch")
-        st.caption("Conflates role stability with provider robustness — see Limitations.")
+        if half_season:
+            st.caption(
+                "One provider, one competition — so a low score is the representation's "
+                "fault, with no provider change to blame. Players appearing in only one half "
+                "are excluded (that is a transfer window, not instability)."
+            )
+        else:
+            st.caption("Conflates role stability with provider robustness — see Limitations.")
 
 st.error(
     "**The honest headline.** The GNN embedding decisively beats classical centrality (ARI "

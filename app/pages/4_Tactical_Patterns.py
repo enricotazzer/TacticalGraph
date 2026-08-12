@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from _shared import (
+    SPLIT_LABELS,
     club_label,
     get_bundle,
     page_header,
@@ -50,10 +51,7 @@ split_choice = st.radio(
     "Split",
     sorted(reports.keys()),
     horizontal=True,
-    format_func=lambda k: (
-        "cross-season (train 2015/16 → test 2017/18)" if k == "cross_season"
-        else "within-season control (2015/16 only)"
-    ),
+    format_func=lambda k: SPLIT_LABELS.get(k, k),
 )
 report = reports[split_choice]
 
@@ -69,37 +67,63 @@ best_lift = max(
 )
 top[3].metric("Best shot lift", f"{best_lift:.2f}×")
 
+# Computed from the loaded report rather than written in: these figures differ per corpus, and
+# stating Serie A's over Premier League data would be the worst kind of quiet error.
+_all_lift = [
+    c for name in report["clusterings"]
+    for c in report["clusterings"][name]["shot_lift_test"]
+]
+_rates = [c["shot_rate"] for c in _all_lift]
+_differing = sum(bool(c.get("differs_from_base")) for c in _all_lift)
+_base = report["base_shot_rate"]
+
 st.success(
-    f"**Clustering finds patterns that strongly discriminate shot-ending possessions.** Against "
-    f"a base rate of {report['base_shot_rate']:.1%}, the hand-crafted representation produces a "
-    "cluster with a **56–68% shot rate** and another with **0.3%** — a spread of more than 4× "
-    "above and 40× below base. Nearly every cluster differs from the base rate by more than "
-    "sampling noise (Wilson intervals)."
+    "**Clustering finds patterns that strongly discriminate shot-ending possessions.** Against a "
+    f"base rate of {_base:.1%}, clusters range from **{min(_rates):.1%}** to "
+    f"**{max(_rates):.1%}** — up to **{max(_rates) / _base:.1f}× above** and "
+    f"**{_base / max(min(_rates), 1e-9):.0f}× below** base. "
+    f"{_differing} of {len(_all_lift)} clusters differ from the base rate by more than sampling "
+    "noise (Wilson intervals)."
 )
 
-st.warning(
-    "**The interpretable baseline beats the learned encoder**, at every k. Hand-crafted chain "
-    "features reach a 4.8× max lift on the cross-season test fold against the GRU "
-    "autoencoder's 3.4×. Inspecting the latent clusters shows why: three of eight are almost "
-    "purely set-piece-initiated (93–95%), so the autoencoder is largely clustering *how a "
-    "possession started* — the action-type one-hot dominates its reconstruction loss — rather "
-    "than how it developed. This mirrors Module 2, where simple positional features also beat "
-    "the learned alternative."
-)
+_by_representation = {
+    name: max((c["lift"] for c in report["clusterings"][name]["shot_lift_test"]), default=0.0)
+    for name in report["clusterings"]
+}
+if len(_by_representation) > 1:
+    _best = max(_by_representation, key=_by_representation.get)
+    _worst = min(_by_representation, key=_by_representation.get)
+    _verdict = (
+        "**The interpretable baseline beats the learned encoder.**"
+        if _best == "hand-crafted"
+        else "**The learned encoder beats the interpretable baseline here.**"
+    )
+    st.warning(
+        f"{_verdict} `{_best}` reaches a **{_by_representation[_best]:.2f}×** max lift on the "
+        f"test fold against `{_worst}`'s {_by_representation[_worst]:.2f}×. Where the "
+        "autoencoder loses, inspecting its latent clusters shows why: several are almost purely "
+        "set-piece-initiated, so it largely clusters *how a possession started* — the "
+        "action-type one-hot dominates its reconstruction loss — rather than how it developed. "
+        "Check the `set-piece share` column below against the cluster profiles."
+    )
 
 # ============================================================== base rate note
-with st.expander("Why the base rate is 12.4% and not 9.7%"):
+with st.expander(f"What the {_base:.1%} base rate is measured over"):
     st.markdown(
-        "Across all **186,318** reconstructed chains, 9.7% contain a shot. This module clusters "
-        "only chains with **at least 3 provider-comparable actions** (109,912 of them), and "
-        "longer possessions are likelier to produce a shot — so the base rate for the "
-        "population actually being clustered is **12.4%**. Every lift on this page is measured "
-        "against 12.4%; using the unfiltered 9.7% would inflate them.\n\n"
+        f"This module clusters the **{report['n_chains']:,}** possessions with **at least 3 "
+        "provider-comparable actions**, and longer possessions are likelier to produce a shot — "
+        f"so the base rate for the population actually being clustered ({_base:.2%}) is higher "
+        "than the rate over all reconstructed chains. Every lift on this page is measured "
+        "against the filtered rate; using the unfiltered one would inflate them.\n\n"
         "The 3-action minimum exists because a one- or two-action possession has no sequence "
-        "structure to model. The comparable-types filter exists because raw chain length "
-        "differs between the two providers by 1.44× (StatsBomb logs carries as dribbles); "
-        "filtering brings that to 0.90×, so the clustering is not partly clustering the "
-        "provider."
+        "structure to model. The comparable-types filter exists so that on a two-provider "
+        "corpus the clustering is not partly clustering the *provider* — raw chain length "
+        "differs by 1.44× between StatsBomb and Wyscout because StatsBomb logs carries as "
+        "dribbles, and filtering brings that to 0.90×.\n\n"
+        "**On a single-provider corpus that filter is no longer necessary**, and keeping it is a "
+        "deliberate conservatism: it discards dribbles (~790 per match in StatsBomb) so that "
+        "results stay comparable across the two corpora. A single-corpus run could use the "
+        "richer action vocabulary and would likely find more structure."
     )
 
 # ============================================================== k sweep
@@ -185,10 +209,10 @@ st.dataframe(
 )
 
 # ============================================================== stability
-st.subheader("Cross-season stability")
+st.subheader("Held-out stability")
 st.markdown(
-    "A pattern that only exists in one provider's data is an artefact. Each cluster is refit on "
-    "the training split and applied unchanged to the held-out season."
+    "A pattern that only exists in the training fold is an artefact. Each cluster is fit on the "
+    "training split and applied unchanged to the held-out fold."
 )
 stability = pd.DataFrame(clustering["stability"])
 stable = int(stability["rate_stable"].sum())
@@ -197,16 +221,16 @@ st.dataframe(stability, hide_index=True, width="stretch")
 if split_choice == "cross_season":
     st.info(
         f"**{stable} of {len(stability)} clusters keep a statistically indistinguishable shot "
-        "rate across the provider change.** On the within-season control it is 8 of 8 for both "
-        "representations — so the instability seen here is attributable to the season/provider "
-        "shift rather than to the clustering being arbitrary. This is exactly what the control "
-        "split is for."
+        "rate across the provider change.** Compare with the within-season control, where the "
+        "same clustering is stable throughout — so instability here is attributable to the "
+        "season/provider shift rather than to the clustering being arbitrary. This is exactly "
+        "what the control split is for."
     )
 else:
     st.success(
-        f"**{stable} of {len(stability)} clusters are stable** within a single season and "
-        "provider, which is the expected result and the reference point for reading the "
-        "cross-season numbers."
+        f"**{stable} of {len(stability)} clusters keep a statistically indistinguishable shot "
+        "rate on the held-out fold**, within a single season and provider. That is the expected "
+        "result, and the reference point for reading any cross-provider numbers."
     )
 
 # ============================================================== examples

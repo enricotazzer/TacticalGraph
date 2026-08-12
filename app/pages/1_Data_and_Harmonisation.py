@@ -11,6 +11,8 @@ from _shared import (
     build_network,
     club_label,
     club_lookup,
+    corpus_providers,
+    is_multi_provider,
     page_header,
     reports,
     sidebar_provenance,
@@ -33,117 +35,134 @@ status_banner(1)
 
 report = reports().get("harmonization_report", {})
 
+# The harmonisation sections compare two providers against each other. On a single-provider
+# corpus there is nothing to compare, and rendering the headings with empty tables underneath
+# would read as "we measured this and found nothing" rather than "this does not apply".
+MULTI_PROVIDER = is_multi_provider()
+
+if not MULTI_PROVIDER:
+    st.info(
+        f"**This corpus has one provider ({', '.join(corpus_providers()) or 'unknown'}), so "
+        "the harmonisation sections do not apply and are hidden** — there is no second "
+        "annotation convention to reconcile. That is the point of this corpus: no provider "
+        "confound to measure. The recipient inference and possession reconstruction below "
+        "still run, because SPADL carries neither regardless of provider. For the "
+        "cross-provider harmonisation results, see the Serie A corpus."
+    )
+
 # =====================================================================  scorecard
-st.subheader("Harmonisation scorecard")
+if MULTI_PROVIDER:
+    st.subheader("Harmonisation scorecard")
 
-st.markdown(
-    "Both providers are missing things the project needs, so those are **reconstructed "
-    "identically for both** — never *real value where available, estimate elsewhere*, which "
-    "would make 2015/16 systematically better than 2017/18 and corrupt the cross-season test."
-)
+    st.markdown(
+        "Both providers are missing things the project needs, so those are **reconstructed "
+        "identically for both** — never *real value where available, estimate elsewhere*, which "
+        "would make 2015/16 systematically better than 2017/18 and corrupt the cross-season "
+        "test."
+    )
 
-accuracy = pd.DataFrame(report.get("recipient_accuracy", []))
-resolution = pd.DataFrame(report.get("recipient_resolution", []))
-possession = pd.DataFrame(report.get("possession", []))
+    accuracy = pd.DataFrame(report.get("recipient_accuracy", []))
+    resolution = pd.DataFrame(report.get("recipient_resolution", []))
+    possession = pd.DataFrame(report.get("possession", []))
 
-left, right = st.columns(2)
-
-with left:
-    st.markdown("**Pass recipient** — SPADL carries none, so it is inferred for both providers")
-    if not accuracy.empty:
-        display = accuracy[["context", "n", "accuracy", "wrong", "unresolved"]].copy()
-        display["context"] = display["context"].map(
-            {
-                "statsbomb-native": "StatsBomb, native density",
-                "statsbomb-degraded": "StatsBomb, degraded to Wyscout-like",
-            }
-        ).fillna(display["context"])
-        for column in ("accuracy", "wrong", "unresolved"):
-            display[column] = (display[column] * 100).round(2)
-        display.columns = ["Measurement", "n passes", "correct %", "wrong %", "unresolved %"]
-        st.dataframe(display, hide_index=True, width="stretch")
-        st.caption(
-            "The second row is the important one. Wyscout has no ground truth, so accuracy "
-            "there cannot be measured directly — degrading the StatsBomb stream to comparable "
-            "action density and re-running the same rule is the honest estimate."
-        )
-    if not resolution.empty:
-        coverage = resolution[["season", "provider", "completed_passes", "resolved_pct"]].copy()
-        coverage["resolved_pct"] = (coverage["resolved_pct"] * 100).round(2)
-        coverage.columns = ["Season", "Provider", "Completed passes", "Resolved %"]
-        st.dataframe(coverage, hide_index=True, width="stretch")
-
-with right:
-    st.markdown("**Possession chains** — StatsBomb has a native counter, Wyscout has none")
-    if not possession.empty:
-        row = possession.iloc[0]
-        st.metric("Adjusted Rand index", f"{row['adjusted_rand_mean']:.3f}")
-        st.metric("Boundary Jaccard", f"{row['boundary_jaccard_mean']:.3f}")
-        st.caption(
-            f"Our rule produces {row['chains_ours_mean']:.0f} chains per match against "
-            f"StatsBomb's {row['chains_statsbomb_mean']:.0f} — it **over-segments by ~25%** "
-            "because every set-piece is treated as a hard restart. Documented rather than "
-            "tuned away; Module 4 should revisit it."
-        )
-
-    shift = pd.DataFrame(report.get("distribution_shift", []))
-    if not shift.empty:
-        st.markdown("**Distribution shift** — KS statistic between seasons")
-        shift.columns = ["Feature", "KS", "mean 2015/16", "mean 2017/18"]
-        st.dataframe(shift, hide_index=True, width="stretch")
-
-# =====================================================  the finding that licenses the project
-st.divider()
-st.subheader("Why passing networks survive the provider switch")
-
-mix = pd.DataFrame(report.get("action_mix", []))
-if not mix.empty:
-    mix = mix.rename(columns={"type_name": "Action type"})
-    mix["rate_ratio"] = pd.to_numeric(mix["rate_ratio"], errors="coerce")
-    mix["comparable"] = mix["rate_ratio"].between(0.75, 1.33)
-    mix["pass-like"] = mix["Action type"].isin(PASS_LIKE_TYPES)
-
-    left, right = st.columns([3, 2])
+    left, right = st.columns(2)
 
     with left:
-        chart = mix.dropna(subset=["rate_ratio"]).sort_values("rate_ratio", ascending=False)
-        chart_display = chart[
-            ["Action type", "per_game_2015_2016", "per_game_2017_2018", "rate_ratio", "comparable"]
-        ].copy()
-        chart_display.columns = ["Action type", "per match 15/16", "per match 17/18",
-                                 "ratio", "comparable"]
-        st.dataframe(
-            chart_display.style.map(
-                lambda v: "background-color: rgba(255,80,80,0.22)" if v is False else "",
-                subset=["comparable"],
-            ),
-            hide_index=True,
-            width="stretch",
-            height=430,
-        )
+        st.markdown("**Pass recipient** — SPADL carries none, so it is inferred for both providers")
+        if not accuracy.empty:
+            display = accuracy[["context", "n", "accuracy", "wrong", "unresolved"]].copy()
+            display["context"] = display["context"].map(
+                {
+                    "statsbomb-native": "StatsBomb, native density",
+                    "statsbomb-degraded": "StatsBomb, degraded to Wyscout-like",
+                }
+            ).fillna(display["context"])
+            for column in ("accuracy", "wrong", "unresolved"):
+                display[column] = (display[column] * 100).round(2)
+            display.columns = ["Measurement", "n passes", "correct %", "wrong %", "unresolved %"]
+            st.dataframe(display, hide_index=True, width="stretch")
+            st.caption(
+                "The second row is the important one. Wyscout has no ground truth, so accuracy "
+                "there cannot be measured directly — degrading the StatsBomb stream to comparable "
+                "action density and re-running the same rule is the honest estimate."
+            )
+        if not resolution.empty:
+            coverage = resolution[["season", "provider", "completed_passes", "resolved_pct"]].copy()
+            coverage["resolved_pct"] = (coverage["resolved_pct"] * 100).round(2)
+            coverage.columns = ["Season", "Provider", "Completed passes", "Resolved %"]
+            st.dataframe(coverage, hide_index=True, width="stretch")
 
     with right:
-        st.markdown(
-            "Per-match **rates**, not shares. Shares are the wrong diagnostic here: "
-            "StatsBomb's dribble inflation mechanically deflates every other type's share, "
-            "making comparable types look divergent."
-        )
-        worst = chart.iloc[0]
-        st.error(
-            f"**Worst offenders — annotation convention, not football.**\n\n"
-            f"`{worst['Action type']}` differs by **{worst['rate_ratio']:.0f}×**. "
-            "`dribble` 8.7×, `tackle` 4.2×, `interception` 0.31×. Any feature that counts "
-            "actions naively would encode *which provider this is* and collapse at test time."
-        )
-        aggregate = pd.DataFrame(report.get("aggregate_rates", []))
-        if not aggregate.empty:
-            passlike = aggregate.iloc[0]
-            st.success(
-                f"**But passes do not have this problem.** All pass-like types together: "
-                f"{passlike['per_game_2015_2016']:.1f} vs {passlike['per_game_2017_2018']:.1f} "
-                f"per match — ratio **{passlike['rate_ratio']:.3f}**.\n\n"
-                "That is the quantitative licence for the whole project."
+        st.markdown("**Possession chains** — StatsBomb has a native counter, Wyscout has none")
+        if not possession.empty:
+            row = possession.iloc[0]
+            st.metric("Adjusted Rand index", f"{row['adjusted_rand_mean']:.3f}")
+            st.metric("Boundary Jaccard", f"{row['boundary_jaccard_mean']:.3f}")
+            st.caption(
+                f"Our rule produces {row['chains_ours_mean']:.0f} chains per match against "
+                f"StatsBomb's {row['chains_statsbomb_mean']:.0f} — it **over-segments by ~25%** "
+                "because every set-piece is treated as a hard restart. Documented rather than "
+                "tuned away; Module 4 should revisit it."
             )
+
+        shift = pd.DataFrame(report.get("distribution_shift", []))
+        if not shift.empty:
+            st.markdown("**Distribution shift** — KS statistic between seasons")
+            shift.columns = ["Feature", "KS", "mean 2015/16", "mean 2017/18"]
+            st.dataframe(shift, hide_index=True, width="stretch")
+
+    # ================================================  the finding that licenses the project
+    st.divider()
+    st.subheader("Why passing networks survive the provider switch")
+
+    mix = pd.DataFrame(report.get("action_mix", []))
+    if not mix.empty:
+        mix = mix.rename(columns={"type_name": "Action type"})
+        mix["rate_ratio"] = pd.to_numeric(mix["rate_ratio"], errors="coerce")
+        mix["comparable"] = mix["rate_ratio"].between(0.75, 1.33)
+        mix["pass-like"] = mix["Action type"].isin(PASS_LIKE_TYPES)
+
+        left, right = st.columns([3, 2])
+
+        with left:
+            chart = mix.dropna(subset=["rate_ratio"]).sort_values("rate_ratio", ascending=False)
+            chart_display = chart[
+                ["Action type", "per_game_2015_2016", "per_game_2017_2018", "rate_ratio", "comparable"]
+            ].copy()
+            chart_display.columns = ["Action type", "per match 15/16", "per match 17/18",
+                                     "ratio", "comparable"]
+            st.dataframe(
+                chart_display.style.map(
+                    lambda v: "background-color: rgba(255,80,80,0.22)" if v is False else "",
+                    subset=["comparable"],
+                ),
+                hide_index=True,
+                width="stretch",
+                height=430,
+            )
+
+        with right:
+            st.markdown(
+                "Per-match **rates**, not shares. Shares are the wrong diagnostic here: "
+                "StatsBomb's dribble inflation mechanically deflates every other type's share, "
+                "making comparable types look divergent."
+            )
+            worst = chart.iloc[0]
+            st.error(
+                f"**Worst offenders — annotation convention, not football.**\n\n"
+                f"`{worst['Action type']}` differs by **{worst['rate_ratio']:.0f}×**. "
+                "`dribble` 8.7×, `tackle` 4.2×, `interception` 0.31×. Any feature that counts "
+                "actions naively would encode *which provider this is* and collapse at test time."
+            )
+            aggregate = pd.DataFrame(report.get("aggregate_rates", []))
+            if not aggregate.empty:
+                passlike = aggregate.iloc[0]
+                st.success(
+                    f"**But passes do not have this problem.** All pass-like types together: "
+                    f"{passlike['per_game_2015_2016']:.1f} vs {passlike['per_game_2017_2018']:.1f} "
+                    f"per match — ratio **{passlike['rate_ratio']:.3f}**.\n\n"
+                    "That is the quantitative licence for the whole project."
+                )
 
 # =====================================================================  match networks
 st.divider()
@@ -203,36 +222,69 @@ st.caption(
 
 # =====================================================================  the eyeball test
 st.divider()
-st.subheader("The harmonisation eyeball test")
-st.markdown(
-    "The same club's **season-aggregate** network from each provider, side by side. Summary "
-    "statistics cannot reveal a mirrored coordinate flip or a provider-specific distortion; "
-    "two pitches can. 16 of 20 clubs appear in both seasons (4 relegated, 4 promoted)."
-)
 
-overlap = clubs_in_both_seasons()
-compare_club = st.selectbox(
-    "Club present in both seasons", overlap, format_func=lambda k: CLUB_DISPLAY[k]
-)
-sb_ids, wy_ids = club_to_team_id("statsbomb"), club_to_team_id("wyscout")
+if MULTI_PROVIDER:
+    st.subheader("The harmonisation eyeball test")
+    st.markdown(
+        "The same club's **season-aggregate** network from each provider, side by side. Summary "
+        "statistics cannot reveal a mirrored coordinate flip or a provider-specific distortion; "
+        "two pitches can. 16 of 20 clubs appear in both seasons (4 relegated, 4 promoted)."
+    )
 
-figure, axes = plt.subplots(1, 2, figsize=(14, 4.8))
-for ax, (season_key, provider_key, team_ids) in zip(
-    axes,
-    [("2015-2016", "statsbomb", sb_ids), ("2017-2018", "wyscout", wy_ids)],
-):
+    overlap = clubs_in_both_seasons()
+    compare_club = st.selectbox(
+        "Club present in both seasons", overlap, format_func=lambda k: CLUB_DISPLAY[k]
+    )
+    sb_ids, wy_ids = club_to_team_id("statsbomb"), club_to_team_id("wyscout")
+
+    figure, axes = plt.subplots(1, 2, figsize=(14, 4.8))
+    for ax, (season_key, provider_key, team_ids) in zip(
+        axes,
+        [("2015-2016", "statsbomb", sb_ids), ("2017-2018", "wyscout", wy_ids)],
+    ):
+        network = build_network(
+            nodes, edges, -1, team_ids[compare_club], season_key, provider_key
+        )
+        passes = int(network.edges["weight"].sum()) if not network.edges.empty else 0
+        draw_network(
+            network,
+            ax,
+            title=f"{CLUB_DISPLAY[compare_club]} — {SEASON_LABEL[season_key]}\n"
+                  f"{network.n_nodes} nodes, {network.n_edges} edges, {passes:,} passes",
+        )
+    st.pyplot(figure, width="stretch")
+    plt.close(figure)
+else:
+    # One provider: there is no side-by-side comparison to make, but the coordinate sanity
+    # check is still worth doing -- a mirrored flip or a scaling error is visible on a pitch
+    # and invisible in summary statistics, regardless of how many providers there are.
+    st.subheader("Season-aggregate networks — coordinate sanity check")
+    st.markdown(
+        "No cross-provider comparison is possible here, so this is the single-corpus version: "
+        "a club's whole season on one pitch. It still catches the failure the two-provider "
+        "version was built for — a mirrored coordinate flip or a scaling error shows up "
+        "immediately and would never appear in a summary table."
+    )
+    single = clubs.sort_values("club")
+    picked = st.selectbox(
+        "Club",
+        list(range(len(single))),
+        format_func=lambda i: single.iloc[i]["club"],
+    )
+    row = single.iloc[picked]
     network = build_network(
-        nodes, edges, -1, team_ids[compare_club], season_key, provider_key
+        nodes, edges, -1, int(row["team_id"]), row["season"], row["provider"]
     )
     passes = int(network.edges["weight"].sum()) if not network.edges.empty else 0
+    figure, ax = plt.subplots(figsize=(8, 5.2))
     draw_network(
         network,
         ax,
-        title=f"{CLUB_DISPLAY[compare_club]} — {SEASON_LABEL[season_key]}\n"
+        title=f"{row['club']} — {SEASON_LABEL.get(row['season'], row['season'])}\n"
               f"{network.n_nodes} nodes, {network.n_edges} edges, {passes:,} passes",
     )
-st.pyplot(figure, width="stretch")
-plt.close(figure)
+    st.pyplot(figure, width="stretch")
+    plt.close(figure)
 
 st.info(
     "Node positions are also correct in absolute terms, which matters because these plots "

@@ -33,6 +33,14 @@ from tacticalgraph.graphs.passing_network import TeamNetwork  # noqa: E402
 
 SEASON_LABEL = {"2015-2016": "2015/16 · StatsBomb", "2017-2018": "2017/18 · Wyscout"}
 
+# One place naming the split kinds, so a page cannot label a `matchweek` run as a
+# "within-season control" by falling through an if/else written when only two kinds existed.
+SPLIT_LABELS = {
+    "cross_season": "cross-season (train 2015/16 → test 2017/18, CONFOUNDED)",
+    "within_season": "within-season control (2015/16 only, unconfounded)",
+    "matchweek": "matchweek (wk1-26 train / 27-33 val / 34-38 test, unconfounded)",
+}
+
 
 @dataclass(frozen=True)
 class Phase:
@@ -78,6 +86,27 @@ def table(name: str) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def reports() -> dict:
     return get_bundle().reports()
+
+
+@st.cache_data(show_spinner=False)
+def corpus_providers() -> list[str]:
+    """Distinct providers in this bundle, read from the data rather than the manifest.
+
+    Pages branch on this instead of on a corpus slug: what makes the harmonisation sections
+    meaningful is having *two providers to compare*, not being named "serie_a".
+    """
+    try:
+        return sorted(table("games.parquet")["provider"].dropna().unique().tolist())
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def is_multi_provider() -> bool:
+    return len(corpus_providers()) > 1
+
+
+def corpus_label() -> str:
+    return get_bundle().corpus_label()
 
 
 def sidebar_provenance() -> None:

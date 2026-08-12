@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from _shared import (
+    SPLIT_LABELS,
     SEASON_LABEL,
     club_label,
     get_bundle,
@@ -61,11 +62,7 @@ split_choice = st.radio(
     "Split",
     sorted(reports.keys()),
     horizontal=True,
-    format_func=lambda k: (
-        "cross-season (train 2015/16 → test 2017/18, CONFOUNDED)"
-        if k == "cross_season"
-        else "within-season control (2015/16 only, unconfounded)"
-    ),
+    format_func=lambda k: SPLIT_LABELS.get(k, k),
 )
 runs = reports[split_choice]
 primary = runs[0]
@@ -120,25 +117,82 @@ with right:
             delta_color="inverse",
         )
 
-st.error(
-    "**The GNN+Transformer is significantly worse than B0, in every seed and both splits.** "
-    "Diagnosis is in the training curves below: with **300 independent training matches** (the "
-    "16 checkpoints of one match are one observation, not sixteen) a 13k–77k parameter "
-    "sequence model memorises the training set. Train loss fell from 1.30 to 0.59 while "
-    "validation loss rose from 0.89 to 2.55. Three fixes were tried — lower learning rate with "
-    "longer patience, a residual path so the model can trivially recover the tabular baseline, "
-    "and a capacity sweep selected on validation — and none changed the conclusion."
-)
+# Every number in the two banners below is read from the loaded reports. They used to be
+# hardcoded from the Serie A run, which would state Serie A figures over Premier League data
+# once a second corpus existed -- the exact misattribution this app is supposed to prevent.
+def _paired_row(runs_for_split: list[dict], model: str) -> dict | None:
+    """Mean paired delta for one model across seeds, with the widest CI seen."""
+    rows = [
+        r for run in runs_for_split for r in run["paired_vs_b0"] if r["model"] == model
+    ]
+    if not rows:
+        return None
+    return {
+        "delta": float(np.mean([r["delta_log_loss"] for r in rows])),
+        "ci_low": float(min(r["ci_low"] for r in rows)),
+        "ci_high": float(max(r["ci_high"] for r in rows)),
+        "n_significant": sum(bool(r["significant"]) for r in rows),
+        "n_runs": len(rows),
+    }
 
-st.info(
-    "**B1 is the champion on the cross-season split** (log-loss 0.7075 vs B0's 0.7504, paired "
-    "Δ −0.043, CI [−0.067, −0.018]): shots, passes and accumulated xThreat do add real "
-    "information over the scoreline.\n\n"
-    "**But that advantage disappears on the unconfounded within-season control** (Δ +0.018, CI "
-    "[−0.048, +0.088] — B0 actually wins). With 60 test matches the intervals are wide, so the "
-    "honest reading is that B1's gain is specific to the cross-season setting rather than a "
-    "general improvement. Only the GNN's deficit is consistent across both splits."
-)
+
+gnn_paired = _paired_row(runs, "gnn_transformer")
+history = primary.get("gnn_history", {})
+
+if gnn_paired and history.get("train_loss"):
+    train_curve, val_curve = history["train_loss"], history["val_loss"]
+    verdict = (
+        "significantly worse than B0"
+        if gnn_paired["n_significant"] == gnn_paired["n_runs"]
+        else f"worse than B0 in {gnn_paired['n_significant']}/{gnn_paired['n_runs']} runs"
+    )
+    st.error(
+        f"**The GNN+Transformer is {verdict} on this split** — paired Δ "
+        f"{gnn_paired['delta']:+.4f} log-loss, CI [{gnn_paired['ci_low']:+.3f}, "
+        f"{gnn_paired['ci_high']:+.3f}] over {gnn_paired['n_runs']} seed(s).\n\n"
+        "The diagnosis is in the training curves below: train loss fell "
+        f"{train_curve[0]:.2f} → {min(train_curve):.2f} while validation rose "
+        f"{val_curve[0]:.2f} → {max(val_curve):.2f}. **A match is one observation, not "
+        "sixteen** — its 16 checkpoints are heavily correlated — so this corpus supplies only a "
+        "few hundred independent labels, and the sequence model memorises them. Three fixes "
+        "were tried: a lower learning rate with longer patience, a residual path so the model "
+        "can trivially recover the tabular baseline, and a capacity sweep selected on "
+        "validation. None changed the conclusion."
+    )
+
+b1_here = _paired_row(runs, "B1")
+if b1_here:
+    beats = b1_here["delta"] < 0
+    others = []
+    for other_split, other_runs in sorted(reports.items()):
+        if other_split == split_choice:
+            continue
+        row = _paired_row(other_runs, "B1")
+        if row:
+            others.append(
+                f"On `{other_split}` it is Δ {row['delta']:+.4f}, CI "
+                f"[{row['ci_low']:+.3f}, {row['ci_high']:+.3f}]"
+                f"{' (significant)' if row['n_significant'] else ' (spans zero)'}."
+            )
+    st.info(
+        f"**B1 vs B0 on this split: Δ {b1_here['delta']:+.4f} log-loss, CI "
+        f"[{b1_here['ci_low']:+.3f}, {b1_here['ci_high']:+.3f}]** — "
+        + (
+            "B1 is ahead"
+            if beats
+            else "B0 is ahead"
+        )
+        + (
+            ", and the interval excludes zero, so shots, passes and accumulated xThreat add "
+            "real information over the scoreline."
+            if b1_here["n_significant"]
+            else ", but the interval spans zero, so the two are indistinguishable here."
+        )
+        + ("\n\n" + " ".join(others) if others else "")
+        + "\n\nRead the splits against each other: an advantage that appears only on the "
+        "confounded cross-season split is a property of that setting, not a general "
+        "improvement. The GNN's deficit is the one result consistent everywhere."
+    )
 
 # ============================================================== paired test
 st.subheader("Is anything actually better than B0?")

@@ -46,7 +46,7 @@ positive ones:
 |---|---|
 | 2 | The GNN embedding beats classical centrality **~10×** on role alignment — but passing topology adds only **+0.73 pp** (Premier League) to **+1.07 pp** (Serie A control) over pitch position, and on the Premier League corpus it *hurts* clustering. Most recoverable signal is spatial. |
 | 3 | **B1 (scoreline + aggregates + xT) is the best model.** The GNN+Transformer is *significantly worse than B0* in all 6 Serie A runs: 300 independent training labels cannot support it. |
-| 4 | Clustering finds possession patterns with a **56–68% shot rate against a 12.4% base** — and the interpretable baseline beats the learned encoder at every k. |
+| 4 | Clustering finds possession patterns reaching a **57.3% shot rate against a 12.37% base** (4.6× above; 81.3% on the within-season control) — and the interpretable baseline beats the learned encoder at every k. |
 
 ---
 
@@ -484,8 +484,9 @@ base rate:
 | 3 | lateral from middle third | 13.3% | 0.034 | [0.030, 0.038] | 0.28× |
 | 7 | open-play brief direct from defensive third | 13.4% | **0.004** | [0.003, 0.006] | 0.03× |
 
-**7 of 8 clusters differ from the base rate by more than sampling noise**, spanning 4.8× above
-to 40× below.
+**7 of 8 clusters differ from the base rate by more than sampling noise.** Shot rates span
+**0.4% to 57.3%** against the 12.37% base — 4.6× above to 32× below. (On the within-season
+control the extremes are wider still, 0.19% to 81.3%, because the folds are smaller.)
 
 | Representation | max lift (test) | shot-rate spread | Silhouette | clusters ≠ base |
 |---|---|---|---|---|
