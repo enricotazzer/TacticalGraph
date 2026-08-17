@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-12T16:11:16+00:00",
-  "git_sha": "b4df92d",
+  "generated_at": "2026-08-17T14:03:17+00:00",
+  "git_sha": "6ae45ad",
   "source": "/Volumes/T7/tacticalgraph/corpora/premier_league",
   "corpus": "premier_league",
   "corpus_label": "Premier League 2015/16",
@@ -107,10 +107,13 @@
     "module3_outcome_matchweek_seed0_batch1.json",
     "module3_outcome_matchweek_seed0_batch16.json",
     "module3_outcome_matchweek_seed0_batch1matched.json",
+    "module3_outcome_matchweek_seed0_residual_b1.json",
     "module3_outcome_matchweek_seed1.json",
     "module3_outcome_matchweek_seed1_batch16.json",
+    "module3_outcome_matchweek_seed1_residual_b1.json",
     "module3_outcome_matchweek_seed2.json",
     "module3_outcome_matchweek_seed2_batch16.json",
+    "module3_outcome_matchweek_seed2_residual_b1.json",
     "module4_patterns_matchweek.json",
     "pattern_review_sheet_gru-autoencoder.csv",
     "pattern_review_sheet_hand-crafted.csv"

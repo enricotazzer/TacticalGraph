@@ -1216,22 +1216,22 @@
   "resources": [
     {
       "name": "state-table",
-      "seconds": 5.44,
-      "peak_rss_mb": 1897.3,
+      "seconds": 5.28,
+      "peak_rss_mb": 1673.6,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "ladder",
-      "seconds": 1.37,
-      "peak_rss_mb": 1903.1,
+      "seconds": 1.38,
+      "peak_rss_mb": 1682.5,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-transformer",
-      "seconds": 76.79,
-      "peak_rss_mb": 1585.2,
+      "seconds": 76.67,
+      "peak_rss_mb": 1338.9,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     }

@@ -47,21 +47,43 @@ Findings worth carrying forward:
   times, 5k three times, 77k twice. The 77k model went from consistently *worst* to competitive,
   so the old preference was measuring gradient noise, not the corpus.
 
-  **Still open, in priority order:**
+  **Both remaining fixes have since been built. Neither rescues the model, and the result is now
+  settled rather than open.**
 
-  1. **Weight the loss by checkpoint.** All 16 are weighted equally, so the model is penalised as
-     hard for not knowing the result at minute 15 (near-irreducible) as at minute 90 (nearly
-     determined). A third to a half of the total loss is currently spent fitting noise.
-  2. **Make `state_head` a residual on a *fitted* baseline.** It is a parallel linear path today,
-     so the model must rediscover B1 by gradient descent instead of starting from it. Fit B1,
-     freeze it, predict a correction to its logits — then "learn nothing" means "match B1" rather
-     than "fail", and the floor becomes B1 instead of chance.
-  3. The model still overfits after its validation minimum, and best-epoch is inconsistent across
-     seeds (6, 1, 2 on the Premier League). The optimisation is better, not fixed.
+  1. **Residual on a fitted B1 — built, and it is the decisive experiment.** B1 is fitted (reusing
+     `fit_ladder`'s existing per-fold predictions, so it is provably the same B1 the report
+     compares against), frozen, and its clipped log-probabilities added to the output with a
+     zero-initialised head. The model therefore *is* B1 at step 0 and learns only a correction.
+     Result: Δ vs B1 = **+0.0278 / +0.0056 / +0.1795** on PL matchweek / Serie A cross-season /
+     within-season — positive everywhere, negative nowhere. Handed the baseline for free, the
+     graph sequence cannot beat it. One real positive: on cross-season it ties B1 and is
+     significantly better than B0 in 3/3 runs, the first significant win for a graph model here —
+     but that is the confounded split.
+
+     A third fix fell out of building it: early stopping only ever scored the model *after* each
+     epoch, so the initial state — the one equal to B1 — could never win, and "B1 is the floor" was
+     unenforceable. The trainer now scores the untrained model and reports `best_epoch = -1` when
+     nothing beats it (3 of 72 configurations).
+  2. **Checkpoint weighting — built, measured, and not justified.** Three schemes (`uniform`,
+     `linear`, `b0_signal` = inverse of B0's per-checkpoint train log-loss), each selected on
+     validation with all reported metrics left unweighted. The control `uniform` won 5 of 9
+     selections, margins were 0.004–0.038 (noise), and the two runs where `b0_signal` won selection
+     produced the *worst* two test scores of the nine. Kept as a validation-selected option;
+     **not** an improvement.
+  3. **Still true:** the model overfits after its validation minimum, and seed variance is large
+     (±0.068 on PL, ±0.147 on within-season; individual runs 0.7605 to 1.0793 — the latter worse
+     than the class prior). The optimisation is better, not fixed.
+  4. **A protocol problem worth recording.** The validation and test folds do not rank the
+     baselines the same way. On PL, B1 scores 0.8763 on validation (behind B0's 0.8249) and 0.7913
+     on test (ahead of B0). The residual model transfers well only where the two folds are
+     comparably hard — Serie A cross-season, gap 0.005, where it matches B1 — and badly where they
+     diverge (PL 0.085, within-season −0.039). Any future config selection on this module is
+     selecting against a fold that misranks the thing being measured.
 
   Process note worth keeping: the evaluation methodology was sound throughout — temporal splits,
-  per-match bootstrap, validation-only sweeps — and none of it caught a wrong training loop. The
-  model had **no unit tests at all** until the batching work added `tests/test_outcome_gnn.py`.
+  per-match bootstrap, validation-only sweeps — and none of it caught a wrong training loop, nor
+  the missing initial-state evaluation that made the residual floor unenforceable. The model had
+  **no unit tests at all** until the batching work started `tests/test_outcome_gnn.py`, now at 31.
   Metric rigour does not substitute for testing the thing being measured.
 
   Also measured: **pooling corpora is safe and mildly helpful** (B0 −0.005 to −0.011, B1 −0.017

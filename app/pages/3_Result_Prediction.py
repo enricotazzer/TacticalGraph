@@ -87,10 +87,16 @@ comparison = pd.DataFrame(primary["comparison"])
 # Every number in the two banners below is read from the loaded reports. They used to be
 # hardcoded from the Serie A run, which would state Serie A figures over Premier League data
 # once a second corpus existed -- the exact misattribution this app is supposed to prevent.
-def _paired_row(runs_for_split: list[dict], model: str) -> dict | None:
-    """Mean paired delta for one model across seeds, with the widest CI seen."""
+def _paired_row(
+    runs_for_split: list[dict], model: str, key: str = "paired_vs_b0"
+) -> dict | None:
+    """Mean paired delta for one model across seeds, with the widest CI seen.
+
+    `key` selects the reference: `paired_vs_b0` (the scoreline) or `paired_vs_b1` (the best
+    tabular model). Reports written before the residual arm existed carry only the former.
+    """
     rows = [
-        r for run in runs_for_split for r in run["paired_vs_b0"] if r["model"] == model
+        r for run in runs_for_split for r in run.get(key, []) if r["model"] == model
     ]
     if not rows:
         return None
@@ -103,16 +109,14 @@ def _paired_row(runs_for_split: list[dict], model: str) -> dict | None:
     }
 
 
-# Aggregated across every seed of this split, so the paired table, the metric beside it and the
-# banner below cannot disagree. Reading `primary["paired_vs_b0"]` here showed seed 0 alone next
-# to a 3-seed mean comparison table, printing two different deltas for the same quantity.
-paired = pd.DataFrame(
-    [
-        {"model": model, **row}
-        for model in MODEL_ORDER
-        if model != "B0" and (row := _paired_row(runs, model)) is not None
-    ]
-).rename(columns={"delta": "delta_log_loss"})
+# Which arm produced these reports. A residual-on-B1 run is initialised as B1, so B1 -- not B0 --
+# is the reference every headline on this page has to quote.
+arm = primary.get("gnn_arm", {})
+residual = arm.get("baseline_residual") == "b1"
+
+# Every paired figure on this page goes through `_paired_row`/`_paired_table`, which aggregate
+# across all seeds of the split. Reading `primary["paired_vs_b0"]` directly used to show seed 0
+# alone beside a 3-seed mean comparison table, printing two different deltas for one quantity.
 
 # Average the metric over seeds; the tabular rungs are deterministic, the GNN is not.
 stacked = pd.concat([pd.DataFrame(r["comparison"]).assign(seed=r["seed"]) for r in runs])
@@ -144,14 +148,19 @@ with left:
     )
 
 with right:
-    best = averaged.iloc[0]
+    # Lowest log-loss, not the first row. `averaged` is reindexed by MODEL_ORDER, which is ladder
+    # order starting at `prior` -- so `iloc[0]` labelled the class prior as the best model on
+    # every split.
+    best = averaged.loc[averaged["log_loss"].idxmin()]
     st.metric("Best model", str(best["model"]), f"log-loss {best['log_loss']:.4f}")
-    gnn_row = paired[paired["model"] == "gnn_transformer"]
-    if not gnn_row.empty:
-        row = gnn_row.iloc[0]
+    headline_reference = "B1" if residual else "B0"
+    row = _paired_row(runs, "gnn_transformer", key=f"paired_vs_{headline_reference.lower()}")
+    if row is None:  # a pre-residual report has only the B0 comparison
+        headline_reference, row = "B0", _paired_row(runs, "gnn_transformer")
+    if row is not None:
         st.metric(
-            "GNN vs B0 (paired Δ log-loss)",
-            f"{row['delta_log_loss']:+.4f}",
+            f"GNN vs {headline_reference} (paired Δ log-loss)",
+            f"{row['delta']:+.4f}",
             f"CI [{row['ci_low']:+.3f}, {row['ci_high']:+.3f}]",
             delta_color="inverse",
         )
@@ -159,46 +168,68 @@ with right:
 gnn_paired = _paired_row(runs, "gnn_transformer")
 history = primary.get("gnn_history", {})
 
+gnn_vs_b1 = _paired_row(runs, "gnn_transformer", key="paired_vs_b1")
+
 if gnn_paired and history.get("train_loss"):
     train_curve, val_curve = history["train_loss"], history["val_loss"]
-    best_epoch = val_curve.index(min(val_curve))
-    n_sig, n_runs = gnn_paired["n_significant"], gnn_paired["n_runs"]
-    beats_b0 = gnn_paired["delta"] < 0
+    # `best_epoch` is recorded by the trainer, where -1 means "no epoch beat the untrained
+    # model". Recomputing it from the curve here would report a trained epoch in exactly the
+    # case that matters most -- a residual run that never improved on its frozen baseline.
+    best_epoch = int(history.get("best_epoch", val_curve.index(min(val_curve))))
+
+    # B1 is the reference that matters whenever the model runs as a residual on it: it starts
+    # *as* B1, so "better than B0" comes almost for free and would flatter the model. Fall back
+    # to the B0 comparison only for reports written before that arm existed.
+    reference = gnn_vs_b1 if (residual and gnn_vs_b1) else gnn_paired
+    reference_name = "B1" if reference is gnn_vs_b1 else "B0"
+    n_sig, n_runs = reference["n_significant"], reference["n_runs"]
+    beats = reference["delta"] < 0
 
     if n_sig == n_runs:
-        verdict, box = f"**significantly worse than B0 in {n_sig}/{n_runs} runs**", st.error
+        verdict, box = (
+            f"**significantly worse than {reference_name} in {n_sig}/{n_runs} runs**", st.error
+        )
     elif n_sig:
         verdict, box = (
-            f"**worse than B0 in {n_sig}/{n_runs} runs**, indistinguishable in the rest",
+            f"**worse than {reference_name} in {n_sig}/{n_runs} runs**, indistinguishable in "
+            "the rest",
             st.warning,
         )
-    elif beats_b0:
+    elif beats:
         verdict, box = (
-            "**indistinguishable from B0** — the point estimate now favours the graph model, "
-            "but the interval spans zero",
+            f"**indistinguishable from {reference_name}** — the point estimate favours the graph "
+            "model, but the interval spans zero",
             st.info,
         )
     else:
         verdict, box = (
-            "**indistinguishable from B0** — still the wrong side of zero, but no longer "
+            f"**indistinguishable from {reference_name}** — on the wrong side of zero, but not "
             "significantly so",
             st.warning,
         )
 
-    box(
+    message = (
         f"The GNN+Transformer is {verdict} on this split: paired Δ "
-        f"{gnn_paired['delta']:+.4f} log-loss, CI [{gnn_paired['ci_low']:+.3f}, "
-        f"{gnn_paired['ci_high']:+.3f}] over {n_runs} seed(s). Train loss "
+        f"{reference['delta']:+.4f} log-loss, CI [{reference['ci_low']:+.3f}, "
+        f"{reference['ci_high']:+.3f}] over {n_runs} seed(s). Train loss "
         f"{train_curve[0]:.2f} → {min(train_curve):.2f}; validation best at epoch "
-        f"{best_epoch}, then rising to {max(val_curve):.2f}.\n\n"
-        "**This result moved once the optimiser was fixed.** The original loop called "
-        "`optimiser.step()` once per match — batch size 1 — and the model was significantly "
-        "worse than B0 in all 9 runs across both corpora, with best validation epoch 0 or 1 in "
-        "most of them. Batching 16 matches per step (and encoding the window graphs in one "
-        "PyG pass) cut that to 1 of 9. The measured ceiling says data volume was never the "
-        "explanation: B0 plateaus at ~280 training matches and the whole headroom beneath it is "
-        "~0.037 log-loss, far less than the deficit the batching removed."
+        f"{best_epoch}, then rising to {max(val_curve):.2f}."
     )
+    if residual:
+        message += (
+            "\n\n**The model starts *as* B1 and learns a correction to it.** A fitted B1 is "
+            "frozen, its log-probabilities are added to the output, and the graph head is "
+            "zero-initialised — so at step 0 the prediction is exactly B1's, and early stopping "
+            "can always fall back to it. That makes B1 the floor rather than something the "
+            "network has to rediscover by gradient descent, and it is why Δ vs B1 is the number "
+            "quoted here: against B0 the residual model would look good for free."
+        )
+        if best_epoch < 0:
+            message += (
+                " **On this split no epoch improved on that starting point**, so what is "
+                "reported is B1 itself."
+            )
+    box(message)
 
 b1_here = _paired_row(runs, "B1")
 if b1_here:
@@ -235,28 +266,61 @@ if b1_here:
     )
 
 # ============================================================== paired test
-st.subheader("Is anything actually better than B0?")
+st.subheader("Is anything actually better than the baselines?")
 st.markdown(
     "The paired bootstrap resamples **whole matches**, not rows. Resampling rows would treat "
     "one match's 16 correlated checkpoints as 16 independent observations and shrink every "
     "interval by roughly 4×, manufacturing significance."
 )
-paired_display = paired.copy()
-paired_display["model"] = paired_display["model"].map(MODEL_LABEL).fillna(paired_display["model"])
-paired_display["significant runs"] = (
-    paired_display["n_significant"].astype(str) + " / " + paired_display["n_runs"].astype(str)
-)
-paired_display = paired_display[
-    ["model", "delta_log_loss", "ci_low", "ci_high", "significant runs"]
-].rename(
-    columns={"model": "Model", "delta_log_loss": "Δ log-loss vs B0 (mean)",
-             "ci_low": "CI low", "ci_high": "CI high"}
-)
-st.dataframe(paired_display.round(4), hide_index=True, width="stretch")
+
+
+def _paired_table(reference: str) -> pd.DataFrame | None:
+    """One row per model: mean Δ against `reference`, widest CI, and how many seeds were sig."""
+    key = f"paired_vs_{reference.lower()}"
+    rows = [
+        {"model": model, **row}
+        for model in MODEL_ORDER
+        if model != reference and (row := _paired_row(runs, model, key=key)) is not None
+    ]
+    if not rows:
+        return None
+    frame = pd.DataFrame(rows)
+    frame["model"] = frame["model"].map(MODEL_LABEL).fillna(frame["model"])
+    frame["significant runs"] = (
+        frame["n_significant"].astype(str) + " / " + frame["n_runs"].astype(str)
+    )
+    return frame[["model", "delta", "ci_low", "ci_high", "significant runs"]].rename(
+        columns={"model": "Model", "delta": f"Δ log-loss vs {reference} (mean)",
+                 "ci_low": "CI low", "ci_high": "CI high"}
+    )
+
+
+# Both references are shown, and which one *matters* depends on the arm. A residual-on-B1 model
+# starts at B1, so beating B0 costs it nothing and only Δ vs B1 tests the graph's contribution.
+b1_table = _paired_table("B1")
+tabs = st.tabs(["vs B1 (the best tabular model)", "vs B0 (the scoreline)"]) if b1_table is not None \
+    else [st.container()]
+with tabs[0]:
+    if b1_table is not None:
+        st.dataframe(b1_table.round(4), hide_index=True, width="stretch")
+        if residual:
+            st.caption(
+                "**This is the comparison that matters for this arm.** The model is initialised "
+                "as B1, so a favourable Δ vs B0 would be inherited rather than earned."
+            )
+    else:
+        st.caption("This report predates the Δ-vs-B1 comparison.")
+if len(tabs) > 1:
+    with tabs[1]:
+        b0_table = _paired_table("B0")
+        if b0_table is not None:
+            st.dataframe(b0_table.round(4), hide_index=True, width="stretch")
+
 st.caption(
-    "Negative Δ = better than B0. Δ is the mean over seeds and the interval is the **widest** "
-    "seen across them, so it is deliberately conservative. `significant runs` counts how many "
-    "seeds produced a CI excluding zero — one run out of three is weak evidence, not a result."
+    "Negative Δ = better than the reference. Δ is the mean over seeds and the interval is the "
+    "**widest** seen across them, so it is deliberately conservative. `significant runs` counts "
+    "how many seeds produced a CI excluding zero — one run out of three is weak evidence, not a "
+    "result."
 )
 
 # ============================================================== per checkpoint

@@ -9,15 +9,26 @@ Architecture, per match:
     causal Transformer encoder over the 16 tokens
     per-timestep 3-class head
 
-Two details do the real work:
+Three details do the real work:
 
 **The causal mask is load-bearing, not decorative.** Without it, the prediction at minute 20
 attends to minute 90 and every reported number is void. It is built once and asserted in
 `tests`.
 
-**The model is deliberately tiny.** 300 independent training labels (the 16 checkpoints of a
-match are one observation, not sixteen) cannot support capacity, and it has to fit Kaggle's
-free tier. 2 GraphSAGE layers, 2 Transformer layers, d_model 64.
+**Where the tabular state enters decides what a null result means.** In residual mode the model
+adds a fitted, frozen B1's logits and zero-initialises its own head, so it starts *as* B1 and
+learns only a correction -- making B1 the floor. See `OutcomeGNNTransformer.__init__`.
+
+**The training objective need not weight all 16 checkpoints equally**, since minute 15 is close
+to irreducible while minute 90 is nearly determined. See `checkpoint_weights`. Only the gradient
+changes; every reported metric stays unweighted.
+
+**On capacity.** The model is small (2 GraphSAGE layers, up to 2 Transformer layers, d_model 64)
+to fit Kaggle's free tier, and the sweep picks between 5k/13k/77k parameters on validation. Note
+that an earlier version of this docstring asserted the corpus "cannot support capacity" -- that
+was wrong. It rested on the sweep preferring small models, which turned out to be an artefact of
+training at batch size 1; once batching worked, the spread between capacities collapsed from
+~0.25 to ~0.04 log-loss and the largest model became competitive.
 """
 
 from __future__ import annotations
@@ -50,6 +61,67 @@ SEQUENCE_STATE_FEATURES: tuple[str, ...] = B1_FEATURES
 N_WINDOWS = 16
 N_CLASSES = 3
 
+# Schemes for how much each of the 16 checkpoints contributes to the training objective.
+#
+# Weighting them equally -- the original behaviour, kept here as `uniform` -- spends as much of
+# the objective on minute 15, where the outcome is close to irreducible (B0 scores ~1.06 log-loss
+# there), as on minute 90, where it is nearly determined. A large share of the loss is therefore
+# spent fitting noise.
+CHECKPOINT_WEIGHT_SCHEMES: tuple[str, ...] = ("uniform", "linear", "b0_signal")
+
+
+def checkpoint_weights(
+    scheme: str,
+    b0_log_loss: np.ndarray | None = None,
+    n_windows: int = N_WINDOWS,
+) -> np.ndarray:
+    """Per-checkpoint training weights, normalised to mean 1.
+
+    The normalisation is not cosmetic: it keeps the loss on the same scale as the unweighted
+    objective, so `clip_grad_norm_`'s threshold and the early-stopping delta mean the same thing
+    whichever scheme is selected.
+
+    - `uniform`   -- every checkpoint counts equally (the control).
+    - `linear`    -- proportional to elapsed match time.
+    - `b0_signal` -- inversely proportional to B0's per-checkpoint log-loss on the **training**
+      fold, so weight follows how much signal is actually there. Fit anywhere but train and the
+      test fold would be shaping its own objective.
+    """
+    if scheme == "uniform":
+        weights = np.ones(n_windows, dtype=np.float64)
+    elif scheme == "linear":
+        weights = np.arange(1, n_windows + 1, dtype=np.float64)
+    elif scheme == "b0_signal":
+        if b0_log_loss is None:
+            raise ValueError("scheme 'b0_signal' needs B0's per-checkpoint train log-loss")
+        losses = np.asarray(b0_log_loss, dtype=np.float64)
+        if losses.shape != (n_windows,):
+            raise ValueError(f"expected {n_windows} per-checkpoint losses, got {losses.shape}")
+        weights = 1.0 / np.clip(losses, 1e-6, None)
+    else:
+        raise ValueError(f"unknown scheme {scheme!r}; expected one of {CHECKPOINT_WEIGHT_SCHEMES}")
+    return weights / weights.mean()
+
+
+def sequence_loss(
+    logits: torch.Tensor, target: torch.Tensor, weights: torch.Tensor | None = None
+) -> torch.Tensor:
+    """Cross-entropy over (batch, timestep), optionally weighted per timestep.
+
+    `reduction="none"` then a manual weighted mean -- `F.cross_entropy`'s own `weight=` argument
+    is per *class*, not per timestep, and using it here would silently reweight home/draw/away
+    instead of early/late.
+
+    With weights normalised to mean 1 this reduces exactly to the unweighted mean when the scheme
+    is `uniform`, which is what makes the before/after a single flag.
+    """
+    per_step = F.cross_entropy(
+        logits.reshape(-1, logits.shape[-1]), target.reshape(-1), reduction="none"
+    ).view(target.shape)
+    if weights is None:
+        return per_step.mean()
+    return (per_step * weights).sum() / (per_step.shape[0] * weights.sum())
+
 
 @dataclass
 class MatchSequence:
@@ -61,6 +133,10 @@ class MatchSequence:
     state: np.ndarray  # (16, n_state)
     home_graphs: list[tuple[np.ndarray, np.ndarray]]  # per window: (x, edge_index)
     away_graphs: list[tuple[np.ndarray, np.ndarray]]
+    # Frozen per-checkpoint logits from a fitted baseline (B1), shape (16, 3). Present only when
+    # the model runs in residual mode; `None` reproduces the original parallel-`state_head`
+    # architecture.
+    base_logits: np.ndarray | None = None
 
 
 class WindowGraphEncoder(nn.Module):
@@ -122,8 +198,10 @@ class OutcomeGNNTransformer(nn.Module):
         n_layers: int = 2,
         dropout: float = 0.2,
         n_classes: int = N_CLASSES,
+        baseline_residual: bool = False,
     ) -> None:
         super().__init__()
+        self.baseline_residual = baseline_residual
         self.encoder = WindowGraphEncoder(node_in_channels, out_channels=graph_out)
         self.project = nn.Linear(2 * graph_out + state_in_channels, d_model)
         # Learned positional embedding: 16 fixed positions, so a table is simpler and no
@@ -141,14 +219,36 @@ class OutcomeGNNTransformer(nn.Module):
         )
         self.transformer = nn.TransformerEncoder(layer, num_layers=n_layers)
         self.head = nn.Linear(d_model, n_classes)
-        # Direct linear path from the scalar match state to the logits.
+
+        # How the model gets access to the tabular match state decides what a null result means.
         #
-        # This is the experimental design, not a crutch. The question Module 3 asks is
-        # "does the graph sequence add anything *over* the tabular state?" -- so the model
-        # must be able to recover the tabular baseline trivially, exactly as Module 2's
-        # `both` variant contains `position`. Without this path the comparison conflates
+        # The question Module 3 asks is "does the graph sequence add anything *over* the tabular
+        # state?", so the model must be able to recover the tabular baseline trivially -- exactly
+        # as Module 2's `both` variant contains `position`. Otherwise the comparison conflates
         # "graphs do not help" with "the network failed to relearn goal difference".
-        self.state_head = nn.Linear(state_in_channels, n_classes)
+        #
+        # Two ways to grant that, and they differ in where the floor sits:
+        #
+        # `state_head` (baseline_residual=False) is a parallel *learned* linear path. The model
+        # can in principle rediscover B1, but it has to do so by gradient descent from a random
+        # start -- so "learn nothing" means "fail", and the floor is chance.
+        #
+        # `baseline_residual=True` instead adds B1's own frozen logits and zero-initialises
+        # `head`, so at step 0 the model *is* B1 and only ever learns a correction to it. The
+        # floor becomes B1: early stopping can always fall back to it, and "learn nothing" means
+        # "match B1". That makes a null result interpretable, which the parallel path never did.
+        # Zero-initialising `head` means the graph encoder and Transformer receive *no* gradient
+        # on the very first step: dL/d(encoded) is scaled by `head.weight`, which is zero. That
+        # looks alarming and is harmless -- `head` itself gets a large gradient immediately, so it
+        # leaves zero after one step and everything upstream trains from step 1 onward. The same
+        # trick is standard in zero-init residual blocks and LoRA. It is asserted in the tests so
+        # nobody "fixes" it back into a random head and loses the match-B1-at-init property.
+        if baseline_residual:
+            nn.init.zeros_(self.head.weight)
+            nn.init.zeros_(self.head.bias)
+            self.state_head = None
+        else:
+            self.state_head = nn.Linear(state_in_channels, n_classes)
         self.d_model = d_model
 
     def encode_tokens(self, sequence: MatchSequence, device: str = "cpu") -> torch.Tensor:
@@ -209,8 +309,22 @@ class OutcomeGNNTransformer(nn.Module):
         encoded = self.transformer(
             tokens + self.positions, mask=causal_mask(N_WINDOWS, device=device)
         )
-        # Scalar state is per-timestep and already causal by construction, so adding it here
-        # cannot leak the future.
+        # Both extra paths are per-timestep and already causal by construction (B1's features at
+        # checkpoint t use only actions up to t, enforced by the truncation test), so adding them
+        # here cannot leak the future.
+        if self.baseline_residual:
+            missing = [s.game_id for s in sequences if s.base_logits is None]
+            if missing:
+                raise ValueError(
+                    f"baseline_residual=True needs base_logits on every sequence; "
+                    f"{len(missing)} lack them (e.g. game {missing[0]})"
+                )
+            base = torch.as_tensor(
+                np.stack([s.base_logits for s in sequences]),
+                dtype=torch.float32,
+                device=device,
+            )
+            return base + self.head(encoded)  # (n_matches, 16, 3)
         return self.head(encoded) + self.state_head(state)  # (n_matches, 16, 3)
 
     def forward(self, sequence: MatchSequence, device: str = "cpu") -> torch.Tensor:
@@ -241,11 +355,17 @@ def make_sequences(
     state_columns: tuple[str, ...] = SEQUENCE_STATE_FEATURES,
     node_columns: tuple[str, ...] = WINDOW_NODE_FEATURES,
     scaler: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
+    base_logit_columns: tuple[str, ...] | None = None,
 ) -> tuple[list[MatchSequence], tuple[np.ndarray, ...]]:
     """Assemble one `MatchSequence` per match.
 
     Standardisation statistics are fit on whatever is passed first (the training fold) and
     reused for val/test via `scaler`; fitting per fold would leak the test distribution.
+
+    `base_logit_columns` names three columns holding a fitted baseline's per-checkpoint log
+    probabilities. They are carried through **unstandardised** -- they are logits to be added to
+    the model's output, not features to be normalised, and scaling them would destroy the property
+    that the residual model reproduces the baseline exactly at initialisation.
     """
     node_matrix = window_features[list(node_columns)].to_numpy(dtype=np.float32)
     state_matrix = state_table[list(state_columns)].to_numpy(dtype=np.float32)
@@ -280,6 +400,11 @@ def make_sequences(
         away = int(teams.loc[game_id, "away_team_id"])
 
         state = (game_rows[list(state_columns)].to_numpy(dtype=np.float32) - state_mean) / state_std
+        base_logits = (
+            game_rows[list(base_logit_columns)].to_numpy(dtype=np.float32)
+            if base_logit_columns is not None
+            else None
+        )
 
         def graphs_for(team: int) -> list[tuple[np.ndarray, np.ndarray]]:
             out = []
@@ -319,6 +444,7 @@ def make_sequences(
                 state=state,
                 home_graphs=graphs_for(home),
                 away_graphs=graphs_for(away),
+                base_logits=base_logits,
             )
         )
 
@@ -347,12 +473,21 @@ def train_outcome_model(
     n_layers: int = 1,
     dropout: float = 0.4,
     batch_size: int = 16,
+    baseline_residual: bool = False,
+    checkpoint_weights: np.ndarray | None = None,
 ) -> tuple[OutcomeGNNTransformer, dict[str, list[float]]]:
     """Train with early stopping on validation log-loss.
 
     Log-loss rather than accuracy for the stopping criterion: with three imbalanced classes
     and a draw class that is barely predictable, accuracy plateaus while calibration is still
     changing, and calibration is what this module reports.
+
+    **`checkpoint_weights` changes the gradient only.** Early stopping, the capacity sweep and
+    every reported metric all use the *unweighted* loss via `evaluate_loss`. That split is
+    deliberate: reweighting is a statement about where the model should spend capacity, not a
+    change to what counts as a good model, and the reported number has to stay comparable to
+    B0/B1/B2. A weighting scheme that hurts the unweighted metric therefore simply loses the
+    validation selection instead of quietly flattering itself.
 
     **`batch_size` is the substantive knob here.** The original loop called
     `optimiser.step()` once per match, i.e. batch size 1: ~260-300 updates per epoch, each
@@ -380,12 +515,30 @@ def train_outcome_model(
         n_heads=n_heads,
         n_layers=n_layers,
         dropout=dropout,
+        baseline_residual=baseline_residual,
     ).to(device)
     optimiser = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    history: dict[str, list[float]] = {"train_loss": [], "val_loss": []}
-    best_state, best_loss, stale = None, float("inf"), 0
+    weights = (
+        torch.as_tensor(checkpoint_weights, dtype=torch.float32, device=device)
+        if checkpoint_weights is not None
+        else None
+    )
+
+    history: dict[str, object] = {"train_loss": [], "val_loss": []}
     rng = np.random.default_rng(seed)
+
+    # Score the *untrained* model before the first epoch, and let it compete for `best_state`.
+    #
+    # This is what actually makes a residual baseline a floor. Evaluating only after each epoch
+    # means the initial state -- the one that reproduces the frozen baseline exactly -- is never a
+    # candidate, so "the model can always fall back to B1" would be a claim the code does not
+    # honour. With it, `best_epoch == -1` reports "training never improved on the baseline", which
+    # is a result worth being able to state.
+    best_loss = evaluate_loss(model, val, device=device)
+    best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+    best_epoch, stale = -1, 0
+    history["val_loss_at_init"] = best_loss
 
     for epoch in range(epochs):
         model.train()
@@ -398,9 +551,7 @@ def train_outcome_model(
             target = torch.tensor(
                 [s.label for s in chunk], dtype=torch.long, device=device
             ).unsqueeze(1).expand(-1, N_WINDOWS)
-            loss = F.cross_entropy(
-                logits.reshape(-1, logits.shape[-1]), target.reshape(-1)
-            )
+            loss = sequence_loss(logits, target, weights)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimiser.step()
@@ -413,7 +564,7 @@ def train_outcome_model(
         history["val_loss"].append(val_loss)
 
         if val_loss < best_loss - 1e-5:
-            best_loss, stale = val_loss, 0
+            best_loss, best_epoch, stale = val_loss, epoch, 0
             best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
         else:
             stale += 1
@@ -421,8 +572,13 @@ def train_outcome_model(
                 log.info("early stop at epoch %d (best val log-loss %.4f)", epoch, best_loss)
                 break
 
-    if best_state is not None:
-        model.load_state_dict(best_state)
+    history["best_epoch"] = best_epoch
+    if best_epoch < 0:
+        log.info(
+            "no epoch improved on the initial state (val log-loss %.4f); returning it unchanged",
+            best_loss,
+        )
+    model.load_state_dict(best_state)
     return model, history
 
 
@@ -433,11 +589,14 @@ def evaluate_loss(
     device: str = "cpu",
     batch_size: int = 32,
 ) -> float:
-    """Mean per-match cross-entropy.
+    """Mean per-match cross-entropy, always **unweighted**.
 
     Batched in chunks and weighted by chunk size, so the result is identical to the
     per-sequence mean regardless of `batch_size` (a plain mean of chunk means would be wrong
     whenever the last chunk is short).
+
+    Deliberately takes no `checkpoint_weights`: this is the number early stopping, the sweep and
+    the report all use, and it has to stay on the same footing as the tabular ladder's log-loss.
     """
     model.eval()
     total, n = 0.0, 0
@@ -447,7 +606,7 @@ def evaluate_loss(
         target = torch.tensor(
             [s.label for s in chunk], dtype=torch.long, device=device
         ).unsqueeze(1).expand(-1, N_WINDOWS)
-        loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), target.reshape(-1))
+        loss = sequence_loss(logits, target)
         total += float(loss) * len(chunk)
         n += len(chunk)
     return total / max(n, 1)

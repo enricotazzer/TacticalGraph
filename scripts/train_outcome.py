@@ -50,6 +50,12 @@ from tacticalgraph.models.outcome_baselines import feature_importance, fit_ladde
 
 log = logging.getLogger("train_outcome")
 
+# Duplicated from `models.outcome_gnn_transformer` on purpose: argparse needs the choices at
+# module import time, and importing the model module here would pull in torch even for
+# `--skip-gnn`, which exists precisely to avoid that. The GNN block asserts the two agree, so a
+# drift fails loudly instead of silently offering a scheme the model does not implement.
+CHECKPOINT_WEIGHT_SCHEMES: tuple[str, ...] = ("uniform", "linear", "b0_signal")
+
 
 def prepare_games(paths: Paths) -> pd.DataFrame:
     """Load the match index, backfilling Wyscout scores if they are still missing."""
@@ -139,6 +145,18 @@ def main() -> int:
         help="suffix for the report filename, so before/after runs do not overwrite",
     )
     parser.add_argument(
+        "--baseline-residual", choices=("none", "b1"), default="b1",
+        help="'b1' adds a fitted, frozen B1's logits and zero-inits the head, so the model "
+             "starts as B1 and learns a correction (B1 becomes the floor). 'none' reproduces "
+             "the original parallel learned state_head, where the floor is chance.",
+    )
+    parser.add_argument(
+        "--checkpoint-weights", nargs="+", default=None,
+        choices=CHECKPOINT_WEIGHT_SCHEMES,
+        help="per-checkpoint training weight schemes to sweep on validation "
+             f"(default: all of {', '.join(CHECKPOINT_WEIGHT_SCHEMES)})",
+    )
+    parser.add_argument(
         "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
         help="which competition corpus to use (default: %(default)s)",
     )
@@ -196,33 +214,83 @@ def main() -> int:
     best_config: dict | None = None
     if not args.skip_gnn:
         from tacticalgraph.models.outcome_gnn_transformer import (
+            CHECKPOINT_WEIGHT_SCHEMES as MODEL_SCHEMES,
+        )
+        from tacticalgraph.models.outcome_gnn_transformer import (
             SEQUENCE_STATE_FEATURES,
             WINDOW_NODE_FEATURES,
             build_window_features,
+            checkpoint_weights,
             make_sequences,
             predict_proba,
             train_outcome_model,
         )
 
+        assert tuple(MODEL_SCHEMES) == CHECKPOINT_WEIGHT_SCHEMES, (
+            "checkpoint weight schemes drifted between this script and the model module: "
+            f"{MODEL_SCHEMES} vs {CHECKPOINT_WEIGHT_SCHEMES}"
+        )
+
+        # ---------------------------------------------------------- frozen baseline logits
+        #
+        # B1 is already fitted -- `fit_ladder` above fitted it on the train fold and predicted on
+        # every fold, row-aligned to `folds[name]`. Reusing that means the frozen baseline is
+        # provably the same B1 the report compares against, and adds no new leakage surface.
+        #
+        # `log` of the probabilities, clipped: softmax(log p) == p, so a zero-initialised head
+        # leaves the model reproducing B1 exactly. Unclipped, a zero probability would give -inf
+        # and poison the first backward pass.
+        base_columns: tuple[str, ...] | None = None
+        residual = args.baseline_residual == "b1"
+        if residual:
+            base_columns = ("b1_logit_home", "b1_logit_draw", "b1_logit_away")
+            for name, frame in folds.items():
+                probabilities = np.clip(ladder["B1"][name], 1e-6, 1.0)
+                frame[list(base_columns)] = np.log(probabilities)
+            log.info("residual mode: head zero-initialised on top of frozen B1 logits")
+
         window_features = build_window_features(window_nodes, window_edges)
         train_sequences, scaler = make_sequences(
-            folds["train"], window_features, window_edges, outcomes
+            folds["train"], window_features, window_edges, outcomes,
+            base_logit_columns=base_columns,
         )
         val_sequences, _ = make_sequences(
-            folds["val"], window_features, window_edges, outcomes, scaler=scaler
+            folds["val"], window_features, window_edges, outcomes, scaler=scaler,
+            base_logit_columns=base_columns,
         )
         test_sequences, _ = make_sequences(
-            folds["test"], window_features, window_edges, outcomes, scaler=scaler
+            folds["test"], window_features, window_edges, outcomes, scaler=scaler,
+            base_logit_columns=base_columns,
         )
         log.info(
             "sequences: %d train / %d val / %d test matches",
             len(train_sequences), len(val_sequences), len(test_sequences),
         )
 
-        # Capacity sweep chosen on the validation fold only. 300 independent training labels
-        # (the 16 checkpoints of a match are one observation) will not support a large model,
-        # so trying a range is basic fairness rather than tuning -- and the winner is picked
-        # by val log-loss, never by test.
+        # ---------------------------------------------------------- checkpoint weight schemes
+        #
+        # `b0_signal` needs B0's per-checkpoint log-loss on the *training* fold. Taking it from
+        # the val or test fold would let the objective be shaped by data it is scored on.
+        schemes = tuple(args.checkpoint_weights or CHECKPOINT_WEIGHT_SCHEMES)
+        train_b0 = per_checkpoint(folds["train"], ladder["B0"]["train"])
+        b0_train_loss = train_b0.sort_values("checkpoint_minute")["log_loss"].to_numpy()
+        weight_schemes = {
+            scheme: checkpoint_weights(scheme, b0_log_loss=b0_train_loss) for scheme in schemes
+        }
+        for scheme, weights in weight_schemes.items():
+            log.info(
+                "checkpoint weights %-9s first=%.3f last=%.3f (mean %.3f)",
+                scheme, weights[0], weights[-1], weights.mean(),
+            )
+
+        # Capacity sweep chosen on the validation fold only -- the winner is picked by val
+        # log-loss, never by test.
+        #
+        # This comment used to justify the range by asserting the corpus could not support a
+        # large model. That was withdrawn: the sweep's preference for small models was an
+        # artefact of training at batch size 1, and once batching worked the spread between
+        # capacities collapsed to ~0.04 log-loss. The range stays because selecting capacity on
+        # validation is basic fairness, not because the answer is known in advance.
         capacity_grid = [
             {"graph_out": 8, "d_model": 16, "n_heads": 2, "n_layers": 1, "dropout": 0.4},
             {"graph_out": 16, "d_model": 32, "n_heads": 2, "n_layers": 1, "dropout": 0.3},
@@ -236,42 +304,71 @@ def main() -> int:
         from tacticalgraph.models.outcome_gnn_transformer import evaluate_loss
 
         sweep, best_config, best_model, best_val = [], None, None, float("inf")
+
+        def try_config(capacity: dict, learning_rate: float, scheme: str) -> float:
+            """Train one configuration, record it, and keep it if it wins on validation."""
+            nonlocal best_val, best_config, best_model, gnn_history
+            candidate, history = train_outcome_model(
+                train_sequences,
+                val_sequences,
+                node_in_channels=len(WINDOW_NODE_FEATURES),
+                state_in_channels=len(SEQUENCE_STATE_FEATURES),
+                epochs=args.epochs,
+                device=args.device,
+                seed=args.seed,
+                batch_size=args.batch_size,
+                baseline_residual=residual,
+                checkpoint_weights=weight_schemes[scheme],
+                lr=learning_rate,
+                **capacity,
+            )
+            # Scored on the *unweighted* validation loss whatever the scheme, so a reweighting
+            # that helps only its own objective cannot win the selection.
+            val_loss = evaluate_loss(candidate, val_sequences, device=args.device)
+            config = {**capacity, "lr": learning_rate, "weights": scheme}
+            # -1 means no epoch beat the untrained model. In residual mode that is the
+            # informative case: the model fell back to B1 rather than improving on it.
+            best_epoch = int(history["best_epoch"])
+            sweep.append({
+                **config,
+                "batch_size": args.batch_size,
+                "residual": args.baseline_residual,
+                "params": sum(p.numel() for p in candidate.parameters()),
+                "val_log_loss": round(val_loss, 4),
+                "val_log_loss_at_init": round(float(history["val_loss_at_init"]), 4),
+                "epochs_run": len(history["train_loss"]),
+                "best_val_epoch": best_epoch,
+            })
+            log.info("config %s -> val log-loss %.4f (best epoch %d)",
+                     config, val_loss, best_epoch)
+            if val_loss < best_val:
+                best_val, best_config, best_model, gnn_history = (
+                    val_loss, config, candidate, history
+                )
+            return val_loss
+
+        # Two stages rather than one full grid, and the reason is the validation fold's size.
+        #
+        # Capacity x learning rate x weighting is 3 x 2 x 3 = 18 configurations, all selected on
+        # ~70 validation matches. That is enough selection pressure for the winner to be noise.
+        # Stage 1 sweeps capacity and learning rate under the *control* weighting; stage 2 then
+        # tries the other schemes only at the winning capacity/learning rate. 8 configurations
+        # instead of 18.
+        #
+        # This is greedy and could miss a scheme that only pays off at some other capacity. It is
+        # also biased *against* the schemes -- the capacity was chosen while they were switched
+        # off -- and since the schemes are my own proposed change, that is the direction the bias
+        # should point.
+        control = schemes[0]
         with ResourceMonitor("gnn-transformer") as gnn_monitor:
             for capacity in capacity_grid:
                 for learning_rate in learning_rates:
-                    config = {**capacity, "lr": learning_rate}
-                    candidate, history = train_outcome_model(
-                        train_sequences,
-                        val_sequences,
-                        node_in_channels=len(WINDOW_NODE_FEATURES),
-                        state_in_channels=len(SEQUENCE_STATE_FEATURES),
-                        epochs=args.epochs,
-                        device=args.device,
-                        seed=args.seed,
-                        batch_size=args.batch_size,
-                        **config,
-                    )
-                    val_loss = evaluate_loss(candidate, val_sequences, device=args.device)
-                    n_params = sum(p.numel() for p in candidate.parameters())
-                    sweep.append({
-                        **config,
-                        "batch_size": args.batch_size,
-                        "params": n_params,
-                        "val_log_loss": round(val_loss, 4),
-                        "epochs_run": len(history["train_loss"]),
-                        "best_val_epoch": int(
-                            history["val_loss"].index(min(history["val_loss"]))
-                        ),
-                    })
-                    log.info(
-                        "config %s -> val log-loss %.4f (%d params, best epoch %d)",
-                        config, val_loss, n_params,
-                        history["val_loss"].index(min(history["val_loss"])),
-                    )
-                    if val_loss < best_val:
-                        best_val, best_config, best_model, gnn_history = (
-                            val_loss, config, candidate, history
-                        )
+                    try_config(capacity, learning_rate, control)
+
+            stage1_capacity = {k: best_config[k] for k in capacity_grid[0]}
+            stage1_lr = best_config["lr"]
+            for scheme in schemes[1:]:
+                try_config(stage1_capacity, stage1_lr, scheme)
         gnn_resources = gnn_monitor.as_dict()
         model = best_model
         log.info("selected capacity %s (val log-loss %.4f)", best_config, best_val)
@@ -298,23 +395,41 @@ def main() -> int:
     print("=" * 82)
     print(comparison.to_string(index=False))
 
-    # The honest headline: is anything actually better than B0?
+    # Paired against B0 (does anything beat the scoreline?) and against B1 (does anything beat
+    # the best tabular model?).
+    #
+    # B1 is the reference that matters once the graph model runs as a residual on it: with B1's
+    # frozen logits as the starting point, "worse than B0" stops being reachable by construction,
+    # so a Δ-vs-B0 headline would flatter the model for free. Δ vs B1 is the question that
+    # survives the change, and both are reported so the older runs remain comparable.
+    paired_rows, paired_b1_rows = [], []
+    for name, probabilities in predictions.items():
+        if name != "B0":
+            paired_rows.append({
+                "model": name,
+                **paired_difference(
+                    test, probabilities, predictions["B0"], n_boot=args.n_boot, seed=args.seed
+                ),
+            })
+        if name != "B1":
+            paired_b1_rows.append({
+                "model": name,
+                **paired_difference(
+                    test, probabilities, predictions["B1"], n_boot=args.n_boot, seed=args.seed
+                ),
+            })
+    paired = pd.DataFrame(paired_rows)
+    paired_b1 = pd.DataFrame(paired_b1_rows)
     print()
     print("## Paired log-loss difference vs B0 (negative = better than B0)")
-    paired_rows = []
-    for name, probabilities in predictions.items():
-        if name == "B0":
-            continue
-        result = paired_difference(
-            test, probabilities, predictions["B0"], n_boot=args.n_boot, seed=args.seed
-        )
-        paired_rows.append({"model": name, **result})
-    paired = pd.DataFrame(paired_rows)
     print(paired.to_string(index=False))
     print()
+    print("## Paired log-loss difference vs B1 (negative = better than B1)")
+    print(paired_b1.to_string(index=False))
+    print()
     print(
-        "A CI containing zero means the model is statistically indistinguishable from B0 on "
-        "this corpus -- which is a result, not a failure to report."
+        "A CI containing zero means the model is statistically indistinguishable from the "
+        "reference on this corpus -- which is a result, not a failure to report."
     )
 
     checkpoint_tables = {}
@@ -353,12 +468,20 @@ def main() -> int:
         "ladder_diagnostics": ladder_diagnostics,
         "comparison": comparison.to_dict(orient="records"),
         "paired_vs_b0": paired.to_dict(orient="records"),
+        "paired_vs_b1": paired_b1.to_dict(orient="records"),
         "per_checkpoint": {k: v.to_dict(orient="records") for k, v in checkpoint_tables.items()},
         "reliability_best": reliability.to_dict(orient="records"),
         "b2_importance": importance.to_dict(orient="records"),
         "gnn_history": gnn_history,
         "gnn_capacity_sweep": sweep,
         "gnn_selected_capacity": best_config,
+        # Which arm produced this report. Without it a reader cannot tell a residual-on-B1 run
+        # from a parallel-state_head one, and the two are not comparable.
+        "gnn_arm": {
+            "baseline_residual": args.baseline_residual,
+            "checkpoint_weight_schemes": list(schemes) if not args.skip_gnn else [],
+            "batch_size": args.batch_size,
+        },
         "resources": [r for r in (state_monitor.as_dict(), ladder_monitor.as_dict(), gnn_resources) if r],
     }
     suffix = f"_{args.tag}" if args.tag else ""
