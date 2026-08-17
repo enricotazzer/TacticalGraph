@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -25,7 +24,6 @@ from tacticalgraph.data.aliases import club_labeller  # noqa: E402
 from tacticalgraph.data.players import load_player_directory  # noqa: E402
 from tacticalgraph.eval.resources import ResourceMonitor  # noqa: E402
 from tacticalgraph.features.centrality import (  # noqa: E402
-    PLAYER_METRICS,
     aggregate_player_season,
     centrality_table,
 )

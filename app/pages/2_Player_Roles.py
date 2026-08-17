@@ -16,7 +16,6 @@ from sklearn.preprocessing import StandardScaler
 from _shared import (
     SEASON_LABEL,
     build_network,
-    club_label,
     club_lookup,
     get_bundle,
     page_header,
@@ -51,16 +50,19 @@ def _module2_reports() -> dict[str, list[dict]]:
         seed = Path(file).stem.split("seed")[-1]
         for row in payload.get("ablation", []):
             ablation.append({**row, "split": split, "seed": int(seed)})
-        if seed == "0":  # clustering is seed-invariant enough; show one to stay readable
-            for row in payload.get("clustering", []):
-                clustering.append({**row, "split": split})
-            for row in payload.get("within_player_consistency", []):
-                consistency.append({**row, "split": split})
-            # `stability` is the current key; `cross_season_stability` is what reports written
-            # before the corpus refactor used. Both are read so an older bundle still renders.
-            kind = payload.get("stability_kind", "cross_season")
-            for row in payload.get("stability", payload.get("cross_season_stability", [])):
-                stability.append({**row, "split": split, "stability_kind": kind})
+        # Every seed is collected and averaged below. An earlier version showed seed 0 only,
+        # on the assumption clustering was "seed-invariant enough" -- it is not. On the Premier
+        # League corpus gnn-both at k=4 scores 0.631 / 0.382 / 0.378 across seeds, so showing
+        # seed 0 displayed 0.631 for a 0.463 mean and flattered the embedding by ~35%.
+        for row in payload.get("clustering", []):
+            clustering.append({**row, "split": split, "seed": int(seed)})
+        for row in payload.get("within_player_consistency", []):
+            consistency.append({**row, "split": split, "seed": int(seed)})
+        # `stability` is the current key; `cross_season_stability` is what reports written
+        # before the corpus refactor used. Both are read so an older bundle still renders.
+        kind = payload.get("stability_kind", "cross_season")
+        for row in payload.get("stability", payload.get("cross_season_stability", [])):
+            stability.append({**row, "split": split, "stability_kind": kind, "seed": int(seed)})
     return {
         "ablation": ablation,
         "clustering": clustering,
@@ -88,6 +90,20 @@ def primary_split(frame: pd.DataFrame) -> str | None:
         if preferred in available:
             return preferred
     return available[0]
+
+
+def mean_over_seeds(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Average per-seed rows down to one row per representation.
+
+    Every table on this page is now built from all seeds, so anything displayed per
+    representation has to be collapsed here rather than showing three near-duplicate rows.
+    """
+    return (
+        frame.groupby("representation", as_index=False)[columns]
+        .mean()
+        .sort_values("representation")
+    )
+
 
 st.subheader("The leakage trap, and the ablation that addresses it")
 st.markdown(
@@ -134,18 +150,29 @@ if not clustering.empty:
     cross = clustering[clustering["split"] == shown_split]
     st.caption(f"Split shown: `{shown_split}`")
     k_choice = st.select_slider("Clusters (k)", sorted(cross["k"].unique()), value=4)
-    subset = cross[cross["k"] == k_choice].drop(columns=["split", "k"])
-    subset = subset.rename(
-        columns={
-            "representation": "Representation",
-            "ari_coarse4": "ARI (4-class role)",
-            "nmi_coarse4": "NMI (4-class role)",
-            "silhouette": "Silhouette",
-            "ari_fine24": "ARI (fine position)",
-            "nmi_fine24": "NMI (fine position)",
-        }
+    subset = cross[cross["k"] == k_choice]
+    METRIC_LABELS = {
+        "ari_coarse4": "ARI (4-class role)",
+        "nmi_coarse4": "NMI (4-class role)",
+        "silhouette": "Silhouette",
+        "ari_fine24": "ARI (fine position)",
+        "nmi_fine24": "NMI (fine position)",
+    }
+    # Mean ± std over seeds. k-means on a learned embedding is genuinely seed-sensitive here,
+    # so a single seed's ARI is not a result -- the spread is part of the finding.
+    n_seeds = subset["seed"].nunique()
+    grouped = subset.groupby("representation", as_index=False)[list(METRIC_LABELS)].agg(
+        ["mean", "std"]
     )
-    st.dataframe(subset, hide_index=True, width="stretch")
+    grouped.columns = ["representation"] + [
+        f"{m}_{stat}" for m in METRIC_LABELS for stat in ("mean", "std")
+    ]
+    display = pd.DataFrame({"Representation": grouped["representation"]})
+    for metric, label in METRIC_LABELS.items():
+        means, stds = grouped[f"{metric}_mean"], grouped[f"{metric}_std"].fillna(0.0)
+        display[label] = [f"{m:.3f} ± {s:.3f}" for m, s in zip(means, stds)]
+    st.dataframe(display, hide_index=True, width="stretch")
+    st.caption(f"Mean ± standard deviation over {n_seeds} seed(s).")
     st.caption(
         "`fine position` = StatsBomb's fine-grained position vocabulary, **never used as a "
         "training label** — the model is supervised with 4 coarse classes only. Agreement here "
@@ -157,9 +184,10 @@ with col_a:
     consistency = pd.DataFrame(data["consistency"])
     if not consistency.empty:
         st.markdown("**Within-player consistency** — same player, different matches")
-        display = consistency[consistency["split"] == primary_split(consistency)][
-            ["representation", "same_player_cosine", "diff_player_cosine", "lift"]
-        ]
+        display = mean_over_seeds(
+            consistency[consistency["split"] == primary_split(consistency)],
+            ["same_player_cosine", "diff_player_cosine", "lift"],
+        )
         display.columns = ["Representation", "same player", "different player", "lift"]
         st.dataframe(display, hide_index=True, width="stretch")
 with col_b:
@@ -174,7 +202,7 @@ with col_b:
             st.markdown("**Half-season stability** — same player, weeks 1-19 vs 20-38")
         else:
             st.markdown("**Cross-season stability** — players matched across providers")
-        display = rows[["representation", "matched_cosine", "shuffled_cosine", "lift"]]
+        display = mean_over_seeds(rows, ["matched_cosine", "shuffled_cosine", "lift"])
         display.columns = ["Representation", "matched", "shuffled", "lift"]
         st.dataframe(display, hide_index=True, width="stretch")
         if half_season:
@@ -186,14 +214,43 @@ with col_b:
         else:
             st.caption("Conflates role stability with provider robustness — see Limitations.")
 
-st.error(
-    "**The honest headline.** The GNN embedding decisively beats classical centrality (ARI "
-    "0.516 vs 0.051 at k=4) — centrality measures *how much* a player is involved, not *in "
-    "what capacity*. **But passing topology is the minor contributor**: `topology` alone is the "
-    "weakest variant everywhere, adding topology to position buys only ~1–1.5 pp, and at k ≥ 6 "
-    "`position` alone matches or beats `both` at recovering fine positions. Much of the fine "
-    "structure the embedding finds — left versus right — is available directly from `mean_y`."
-)
+# The headline is computed from the reports actually loaded, never written in prose: this page
+# renders whichever corpus was last exported, and the two corpora disagree about how much
+# topology contributes. Hardcoding Serie A's numbers here misdescribed a Premier League bundle.
+def _headline() -> str:
+    parts: list[str] = []
+    if not clustering.empty:
+        at_k4 = clustering[(clustering["split"] == primary_split(clustering)) & (clustering["k"] == 4)]
+        by_rep = at_k4.groupby("representation")["ari_coarse4"].mean()
+        gnn = by_rep[[r for r in by_rep.index if r.startswith("gnn-both")]]
+        base = by_rep[[r for r in by_rep.index if "centrality" in r]]
+        if not gnn.empty and not base.empty:
+            g, b = float(gnn.iloc[0]), float(base.iloc[0])
+            ratio = f" (~{g / b:.0f}×)" if b > 0 else ""
+            parts.append(
+                f"The GNN embedding beats classical centrality on role alignment — ARI "
+                f"**{g:.3f} vs {b:.3f}** at k=4{ratio}. Centrality measures *how much* a player "
+                f"is involved, not *in what capacity*."
+            )
+    if not ablation.empty:
+        pos = ablation[ablation["feature_set"] == "position"]["test_acc"].mean()
+        both = ablation[ablation["feature_set"] == "both"]["test_acc"].mean()
+        topo = ablation[ablation["feature_set"] == "topology"]["test_acc"].mean()
+        if pd.notna(pos) and pd.notna(both):
+            parts.append(
+                f"**But passing topology is the minor contributor**: adding it to position buys "
+                f"only **{(both - pos) * 100:+.2f} pp** ({pos:.4f} → {both:.4f}), and topology "
+                f"alone reaches just {topo:.4f}. Much of the structure the embedding finds — left "
+                f"versus right — is available directly from `mean_y`."
+            )
+    if not parts:
+        return ""
+    return "**The honest headline.** " + " ".join(parts)
+
+
+headline = _headline()
+if headline:
+    st.error(headline)
 
 # ============================================================== leaderboard
 st.divider()

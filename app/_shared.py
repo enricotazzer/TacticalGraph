@@ -62,8 +62,8 @@ PHASES: tuple[Phase, ...] = (
     Phase(2, "Player centrality & functional role", True,
           "Classical centrality baseline plus GraphSAGE role embeddings, with ablations."),
     Phase(3, "Match result prediction (GNN + Transformer)", True,
-          "Baseline ladder built; the graph model loses to B0 on every corpus — reported as a "
-          "negative result."),
+          "Baseline ladder built; B1 wins. The graph model was significantly worse than B0 in "
+          "9 of 9 runs until an optimiser fix cut that to 1 of 9."),
     Phase(4, "Recurring tactical patterns", True,
           "Chains clustered two ways; the interpretable baseline beats the learned encoder. "
           "Human review pending."),

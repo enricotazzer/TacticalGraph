@@ -22,7 +22,7 @@ import re
 
 import pandas as pd
 
-from tacticalgraph.config import SERIE_A_STATSBOMB, SERIE_A_WYSCOUT, Paths
+from tacticalgraph.config import Paths
 from tacticalgraph.data.download import load_json
 from tacticalgraph.data.enrichment import load_enrichment
 from tacticalgraph.data.roles import statsbomb_to_coarse, wyscout_to_coarse

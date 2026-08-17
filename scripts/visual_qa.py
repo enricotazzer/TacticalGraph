@@ -24,7 +24,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pandas as pd  # noqa: E402
 
-from tacticalgraph.config import CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402, SERIE_A_STATSBOMB, SERIE_A_WYSCOUT  # noqa: E402
+from tacticalgraph.config import (  # noqa: E402
+    CORPORA,
+    DEFAULT_CORPUS,
+    SERIE_A_STATSBOMB,
+    SERIE_A_WYSCOUT,
+    Paths,
+)
 from tacticalgraph.data.aliases import (  # noqa: E402
     CLUB_DISPLAY,
     club_to_team_id,
@@ -85,6 +91,19 @@ def main() -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)-7s | %(message)s", datefmt="%H:%M:%S"
     )
+    # The club-by-club comparison below is a two-provider eyeball test and leans on the Serie A
+    # alias tables, so it cannot be run on a single-provider corpus. Fail loudly rather than
+    # emit figures built from empty frames.
+    required = {SERIE_A_STATSBOMB.key, SERIE_A_WYSCOUT.key}
+    available = {season.key for season in CORPORA[args.corpus].seasons}
+    if not required <= available:
+        log.error(
+            "corpus %r has seasons %s; this QA compares %s side by side and is only defined "
+            "on a multi-provider corpus -- exiting.",
+            args.corpus, sorted(available), sorted(required),
+        )
+        return 2
+
     paths = Paths.load(args.corpus).ensure()
     games = read_games(paths)
 

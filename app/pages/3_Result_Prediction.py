@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob
 import json
+import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -13,7 +14,6 @@ import streamlit as st
 
 from _shared import (
     SPLIT_LABELS,
-    SEASON_LABEL,
     club_label,
     get_bundle,
     page_header,
@@ -26,8 +26,8 @@ st.set_page_config(page_title="M3 · Result Prediction", page_icon="📈", layou
 
 page_header(
     "📈 Module 3 — In-Match Result Prediction",
-    "A baseline ladder against a GNN+Transformer over passing-network sequences. The headline "
-    "is a negative result, reported as such.",
+    "A baseline ladder against a GNN+Transformer over passing-network sequences. Originally a "
+    "clear negative result; an optimiser fix turned most of it into a draw.",
 )
 sidebar_provenance()
 status_banner(3)
@@ -42,12 +42,21 @@ MODEL_LABEL = {
 }
 
 
+#: Canonical report filename: module3_outcome_<split>_seed<n>.json and nothing more. Ablation
+#: runs carry a `--tag` suffix (e.g. `..._seed0_batch1.json`), and those must NOT be mixed in:
+#: they share a `split.kind` with the canonical run, so a plain glob would silently average two
+#: different training configurations into one set of "the" results.
+CANONICAL_REPORT = re.compile(r"^module3_outcome_(?P<split>[a-z_]+)_seed\d+\.json$")
+
+
 @st.cache_data(show_spinner=False)
 def load_reports() -> dict[str, list[dict]]:
-    """Module 3 reports across seeds and splits."""
+    """Module 3 reports across seeds and splits, canonical runs only."""
     directory = get_bundle().root / "reports"
     out: dict[str, list[dict]] = {}
     for file in sorted(glob.glob(str(directory / "module3_outcome_*.json"))):
+        if not CANONICAL_REPORT.match(Path(file).name):
+            continue
         payload = json.loads(Path(file).read_text())
         out.setdefault(payload["split"]["kind"], []).append(payload)
     return out
@@ -73,7 +82,37 @@ st.caption(primary["split"]["description"])
 st.subheader("The result")
 
 comparison = pd.DataFrame(primary["comparison"])
-paired = pd.DataFrame(primary["paired_vs_b0"])
+
+
+# Every number in the two banners below is read from the loaded reports. They used to be
+# hardcoded from the Serie A run, which would state Serie A figures over Premier League data
+# once a second corpus existed -- the exact misattribution this app is supposed to prevent.
+def _paired_row(runs_for_split: list[dict], model: str) -> dict | None:
+    """Mean paired delta for one model across seeds, with the widest CI seen."""
+    rows = [
+        r for run in runs_for_split for r in run["paired_vs_b0"] if r["model"] == model
+    ]
+    if not rows:
+        return None
+    return {
+        "delta": float(np.mean([r["delta_log_loss"] for r in rows])),
+        "ci_low": float(min(r["ci_low"] for r in rows)),
+        "ci_high": float(max(r["ci_high"] for r in rows)),
+        "n_significant": sum(bool(r["significant"]) for r in rows),
+        "n_runs": len(rows),
+    }
+
+
+# Aggregated across every seed of this split, so the paired table, the metric beside it and the
+# banner below cannot disagree. Reading `primary["paired_vs_b0"]` here showed seed 0 alone next
+# to a 3-seed mean comparison table, printing two different deltas for the same quantity.
+paired = pd.DataFrame(
+    [
+        {"model": model, **row}
+        for model in MODEL_ORDER
+        if model != "B0" and (row := _paired_row(runs, model)) is not None
+    ]
+).rename(columns={"delta": "delta_log_loss"})
 
 # Average the metric over seeds; the tabular rungs are deterministic, the GNN is not.
 stacked = pd.concat([pd.DataFrame(r["comparison"]).assign(seed=r["seed"]) for r in runs])
@@ -117,47 +156,48 @@ with right:
             delta_color="inverse",
         )
 
-# Every number in the two banners below is read from the loaded reports. They used to be
-# hardcoded from the Serie A run, which would state Serie A figures over Premier League data
-# once a second corpus existed -- the exact misattribution this app is supposed to prevent.
-def _paired_row(runs_for_split: list[dict], model: str) -> dict | None:
-    """Mean paired delta for one model across seeds, with the widest CI seen."""
-    rows = [
-        r for run in runs_for_split for r in run["paired_vs_b0"] if r["model"] == model
-    ]
-    if not rows:
-        return None
-    return {
-        "delta": float(np.mean([r["delta_log_loss"] for r in rows])),
-        "ci_low": float(min(r["ci_low"] for r in rows)),
-        "ci_high": float(max(r["ci_high"] for r in rows)),
-        "n_significant": sum(bool(r["significant"]) for r in rows),
-        "n_runs": len(rows),
-    }
-
-
 gnn_paired = _paired_row(runs, "gnn_transformer")
 history = primary.get("gnn_history", {})
 
 if gnn_paired and history.get("train_loss"):
     train_curve, val_curve = history["train_loss"], history["val_loss"]
-    verdict = (
-        "significantly worse than B0"
-        if gnn_paired["n_significant"] == gnn_paired["n_runs"]
-        else f"worse than B0 in {gnn_paired['n_significant']}/{gnn_paired['n_runs']} runs"
-    )
-    st.error(
-        f"**The GNN+Transformer is {verdict} on this split** — paired Δ "
+    best_epoch = val_curve.index(min(val_curve))
+    n_sig, n_runs = gnn_paired["n_significant"], gnn_paired["n_runs"]
+    beats_b0 = gnn_paired["delta"] < 0
+
+    if n_sig == n_runs:
+        verdict, box = f"**significantly worse than B0 in {n_sig}/{n_runs} runs**", st.error
+    elif n_sig:
+        verdict, box = (
+            f"**worse than B0 in {n_sig}/{n_runs} runs**, indistinguishable in the rest",
+            st.warning,
+        )
+    elif beats_b0:
+        verdict, box = (
+            "**indistinguishable from B0** — the point estimate now favours the graph model, "
+            "but the interval spans zero",
+            st.info,
+        )
+    else:
+        verdict, box = (
+            "**indistinguishable from B0** — still the wrong side of zero, but no longer "
+            "significantly so",
+            st.warning,
+        )
+
+    box(
+        f"The GNN+Transformer is {verdict} on this split: paired Δ "
         f"{gnn_paired['delta']:+.4f} log-loss, CI [{gnn_paired['ci_low']:+.3f}, "
-        f"{gnn_paired['ci_high']:+.3f}] over {gnn_paired['n_runs']} seed(s).\n\n"
-        "The diagnosis is in the training curves below: train loss fell "
-        f"{train_curve[0]:.2f} → {min(train_curve):.2f} while validation rose "
-        f"{val_curve[0]:.2f} → {max(val_curve):.2f}. **A match is one observation, not "
-        "sixteen** — its 16 checkpoints are heavily correlated — so this corpus supplies only a "
-        "few hundred independent labels, and the sequence model memorises them. Three fixes "
-        "were tried: a lower learning rate with longer patience, a residual path so the model "
-        "can trivially recover the tabular baseline, and a capacity sweep selected on "
-        "validation. None changed the conclusion."
+        f"{gnn_paired['ci_high']:+.3f}] over {n_runs} seed(s). Train loss "
+        f"{train_curve[0]:.2f} → {min(train_curve):.2f}; validation best at epoch "
+        f"{best_epoch}, then rising to {max(val_curve):.2f}.\n\n"
+        "**This result moved once the optimiser was fixed.** The original loop called "
+        "`optimiser.step()` once per match — batch size 1 — and the model was significantly "
+        "worse than B0 in all 9 runs across both corpora, with best validation epoch 0 or 1 in "
+        "most of them. Batching 16 matches per step (and encoding the window graphs in one "
+        "PyG pass) cut that to 1 of 9. The measured ceiling says data volume was never the "
+        "explanation: B0 plateaus at ~280 training matches and the whole headroom beneath it is "
+        "~0.037 log-loss, far less than the deficit the batching removed."
     )
 
 b1_here = _paired_row(runs, "B1")
@@ -203,12 +243,21 @@ st.markdown(
 )
 paired_display = paired.copy()
 paired_display["model"] = paired_display["model"].map(MODEL_LABEL).fillna(paired_display["model"])
-paired_display = paired_display.rename(
-    columns={"delta_log_loss": "Δ log-loss vs B0", "ci_low": "CI low", "ci_high": "CI high",
-             "significant": "CI excludes 0"}
+paired_display["significant runs"] = (
+    paired_display["n_significant"].astype(str) + " / " + paired_display["n_runs"].astype(str)
 )
-st.dataframe(paired_display, hide_index=True, width="stretch")
-st.caption("Negative Δ = better than B0. A CI containing zero means indistinguishable from B0.")
+paired_display = paired_display[
+    ["model", "delta_log_loss", "ci_low", "ci_high", "significant runs"]
+].rename(
+    columns={"model": "Model", "delta_log_loss": "Δ log-loss vs B0 (mean)",
+             "ci_low": "CI low", "ci_high": "CI high"}
+)
+st.dataframe(paired_display.round(4), hide_index=True, width="stretch")
+st.caption(
+    "Negative Δ = better than B0. Δ is the mean over seeds and the interval is the **widest** "
+    "seen across them, so it is deliberately conservative. `significant runs` counts how many "
+    "seeds produced a CI excluding zero — one run out of three is weak evidence, not a result."
+)
 
 # ============================================================== per checkpoint
 st.subheader("Log-loss over the course of a match")

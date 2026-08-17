@@ -15,7 +15,6 @@ import pytest
 from tacticalgraph.eval.patterns import shot_lift, wilson_interval
 from tacticalgraph.features.chains import (
     CHAIN_FEATURES,
-    MIN_CHAIN_ACTIONS,
     build_chain_table,
     chain_sequences,
     cluster_profiles,

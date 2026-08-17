@@ -20,39 +20,60 @@ re-litigated later. Data availability is documented separately in
 Result prediction and tactical pattern discovery are built on both corpora; see the README.
 Findings worth carrying forward:
 
-- **Module 3's GNN+Transformer loses to B0, and "not enough data" is NOT the explanation.**
-  `scripts/estimate_ceiling.py` measured it: B0 **plateaus** by ~280 training matches (doubling
-  to 560 moves it −0.002 to −0.004, inside subsample noise), and the total headroom below B0 is
-  only **~0.037** log-loss (B1 at 560 matches reaches 0.709 against B0's 0.746 on Serie A). The
-  GNN's deficit is **+0.15 to +0.24** — four to six times the entire available headroom.
+- **Module 3's negative result was mostly an optimiser bug. Two things were fixed; two remain.**
 
-  So more data cannot rescue it. An earlier version of this file claimed the opposite; that
-  claim was wrong and is retracted. The remaining suspects are optimisation and formulation:
+  The published claim was "the GNN+Transformer is significantly worse than B0 in all 9 runs
+  because 300 independent training matches cannot support a sequence model". Both halves were
+  wrong, and they were falsified in this order:
 
-  1. **Batch size is effectively 1** — `optimiser.step()` fires once per match inside the
-     training loop, ~260-300 noisy updates per epoch with no gradient accumulation. Best
-     validation epoch is 0 or 1 in 6 of 8 runs across both corpora, which is what a model that
-     never receives a usable gradient looks like.
-  2. **The loss weights all 16 checkpoints equally**, so the model is penalised as hard for not
-     knowing the result at minute 15 (near-irreducible) as at minute 90 (nearly determined).
-  3. **`state_head` is a parallel linear path, not a residual on a fitted baseline.** The model
-     must rediscover the tabular baseline by gradient descent instead of starting from it. Fit
-     B1 first, freeze it, and predict a correction to its logits — then "learn nothing" means
-     "match B1" rather than "fail".
+  **(a) Data scarcity was not the cause.** `scripts/estimate_ceiling.py` measured the learning
+  curve on the pooled 1,140-match corpus: B0 **plateaus** by ~280 training matches (doubling to
+  560 moves it −0.002 to −0.004, inside subsample noise) and the total headroom below B0 is only
+  **~0.037** log-loss. The deficit was +0.15 to +0.24 — four to six times that. No amount of
+  extra data could have closed it.
+
+  **(b) `optimiser.step()` was inside the per-match loop**, so batch size was literally 1:
+  ~260-300 updates per epoch, each from one match's 16 heavily-correlated checkpoints. Best
+  validation epoch was 0 or 1 in 6 of 8 runs. Batching 16 matches per step, and encoding all
+  window graphs in one PyG pass, moved "significantly worse than B0" from **9 of 9 runs to 1 of
+  9** — and on Serie A cross-season the point estimate is now *better* than B0 (Δ −0.0168, CI
+  spanning zero). Wall time fell 663 s → 145 s for the same 6-config sweep. A controlled arm with
+  an identical config budget confirms the gain is the batching, not a wider search.
+
+  A third claim also had to be withdrawn: the sweep's consistent preference for the *smallest*
+  capacity was reported as evidence the corpus could not support a larger model. With batching
+  capacity becomes roughly **neutral** — the spread between the best 5k, 13k and 77k config falls
+  from 0.25–0.28 to a mean of 0.038 log-loss, and across 9 canonical runs the winner is 13k four
+  times, 5k three times, 77k twice. The 77k model went from consistently *worst* to competitive,
+  so the old preference was measuring gradient noise, not the corpus.
+
+  **Still open, in priority order:**
+
+  1. **Weight the loss by checkpoint.** All 16 are weighted equally, so the model is penalised as
+     hard for not knowing the result at minute 15 (near-irreducible) as at minute 90 (nearly
+     determined). A third to a half of the total loss is currently spent fitting noise.
+  2. **Make `state_head` a residual on a *fitted* baseline.** It is a parallel linear path today,
+     so the model must rediscover B1 by gradient descent instead of starting from it. Fit B1,
+     freeze it, predict a correction to its logits — then "learn nothing" means "match B1" rather
+     than "fail", and the floor becomes B1 instead of chance.
+  3. The model still overfits after its validation minimum, and best-epoch is inconsistent across
+     seeds (6, 1, 2 on the Premier League). The optimisation is better, not fixed.
+
+  Process note worth keeping: the evaluation methodology was sound throughout — temporal splits,
+  per-match bootstrap, validation-only sweeps — and none of it caught a wrong training loop. The
+  model had **no unit tests at all** until the batching work added `tests/test_outcome_gnn.py`.
+  Metric rigour does not substitute for testing the thing being measured.
 
   Also measured: **pooling corpora is safe and mildly helpful** (B0 −0.005 to −0.011, B1 −0.017
   on the Premier League fold, B2 −0.17 to −0.23), so cross-provider training needs no domain
   adaptation to be worth doing.
 - **Module 2's topology contribution is near zero and shrinks on the cleaner corpus**
-  (+0.25 pp on the Premier League vs ~1.1–1.5 pp on Serie A). Position features carry the
+  (+0.73 pp on the Premier League, 3-seed mean, spanning +0.25 to +1.06 across seeds, vs
+  ~1.1–1.5 pp on Serie A). Position features carry the
   signal; graph topology adds almost nothing for role identification.
 - **Module 4's set-piece rule still over-segments.** Chains restart on every set piece, which
   splits one phase of play into fragments. A possession that restarts on a throw-in is often
   the same attack.
-- **Module 3's batch size is effectively 1** — one optimiser step per match, ~260-300 noisy
-  updates per epoch with no gradient accumulation. This is a plausible contributor to the
-  validation oscillation that was treated by lowering the learning rate. Worth fixing before
-  concluding anything further about the architecture.
 
 ## Known gaps in the graph representation
 

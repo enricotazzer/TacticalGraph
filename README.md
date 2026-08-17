@@ -44,8 +44,8 @@ positive ones:
 
 | Module | Finding |
 |---|---|
-| 2 | The GNN embedding beats classical centrality **~10×** on role alignment — but passing topology adds only **+0.73 pp** (Premier League) to **+1.07 pp** (Serie A control) over pitch position, and on the Premier League corpus it *hurts* clustering. Most recoverable signal is spatial. |
-| 3 | **B1 (scoreline + aggregates + xT) is the best model.** The GNN+Transformer is *significantly worse than B0* in all 6 Serie A runs: 300 independent training labels cannot support it. |
+| 2 | The GNN embedding beats classical centrality **~10×** on role alignment — but passing topology adds only **+0.73 pp** (Premier League) to **+1.07 pp** (Serie A control) over pitch position, and its clustering benefit is clear on Serie A yet indistinguishable from noise on the Premier League. Most recoverable signal is spatial. |
+| 3 | **B1 (scoreline + aggregates + xT) is the best model** on every split. The GNN+Transformer was reported as *significantly worse than B0 in all 9 runs* — until a batching fix cut that to **1 of 9**. The original negative result was largely an optimiser bug (`optimiser.step()` once per match), not a data limitation; a measured learning curve shows B0 plateaus at ~280 matches with only ~0.037 log-loss of headroom. |
 | 4 | Clustering finds possession patterns reaching a **57.3% shot rate against a 12.37% base** (4.6× above; 81.3% on the within-season control) — and the interpretable baseline beats the learned encoder at every k. |
 
 ---
@@ -290,30 +290,39 @@ cross-season contribution was the provider change, not passing structure.
 K-means over each representation, scored against the coarse role and against the
 fine-grained position **that nothing was trained on**:
 
+All figures are **mean ± std over 3 seeds**. k-means on a learned embedding is seed-sensitive,
+and an earlier version of this table quoted seed 0 alone — which flattered the Premier League
+embedding by ~35% (0.631 for a 0.463 mean). The spread is part of the result.
+
+Serie A, cross-season split:
+
 | Representation | k | ARI (4-class) | NMI (4-class) | Silhouette | ARI (fine) | NMI (fine) |
 |---|---|---|---|---|---|---|
-| centrality (baseline) | 4 | 0.051 | 0.096 | 0.196 | 0.030 | 0.076 |
-| gnn-topology | 4 | 0.302 | 0.351 | 0.270 | 0.113 | 0.286 |
-| gnn-position | 4 | 0.320 | 0.440 | 0.266 | 0.133 | 0.395 |
-| **gnn-both** | 4 | **0.516** | **0.542** | **0.309** | **0.175** | **0.418** |
-| centrality (baseline) | 12 | 0.042 | 0.111 | 0.153 | 0.055 | 0.104 |
-| gnn-position | 12 | 0.240 | 0.422 | 0.219 | **0.340** | **0.498** |
-| gnn-both | 12 | 0.276 | 0.443 | 0.264 | 0.321 | 0.480 |
+| centrality (baseline) | 4 | 0.051 ± 0.000 | 0.096 | 0.196 | 0.030 | 0.076 |
+| gnn-topology | 4 | 0.282 ± 0.040 | 0.328 | 0.281 | 0.106 | 0.266 |
+| gnn-position | 4 | 0.347 ± 0.081 | 0.419 | 0.276 | 0.151 | 0.390 |
+| **gnn-both** | 4 | **0.537 ± 0.019** | **0.544** | **0.311** | **0.184** | **0.426** |
+| centrality (baseline) | 12 | 0.042 ± 0.000 | 0.111 | 0.153 | 0.055 | 0.104 |
+| gnn-position | 12 | 0.263 ± 0.022 | 0.418 | 0.246 | **0.348** | **0.513** |
+| gnn-both | 12 | 0.271 ± 0.008 | 0.444 | 0.245 | 0.307 | 0.466 |
 
-On the Premier League corpus, mean of 3 seeds at k=4 — and the ordering changes:
+Premier League, matchweek split, k=4:
 
 | Representation | ARI (4-class) | NMI (4-class) | ARI (fine) | NMI (fine) |
 |---|---|---|---|---|
-| centrality (baseline) | 0.052 | 0.100 | 0.037 | 0.082 |
-| gnn-topology | 0.295 | 0.354 | 0.094 | 0.255 |
-| **gnn-position** | **0.495** | **0.555** | **0.179** | **0.416** |
-| gnn-both | 0.463 | 0.543 | 0.155 | 0.389 |
+| centrality (baseline) | 0.052 ± 0.000 | 0.100 | 0.037 | 0.082 |
+| gnn-topology | 0.295 ± 0.008 | 0.354 | 0.094 | 0.255 |
+| gnn-position | 0.495 ± 0.184 | 0.555 | 0.179 | 0.416 |
+| gnn-both | 0.463 ± 0.145 | 0.543 | 0.155 | 0.389 |
 
-**`gnn-position` beats `gnn-both` here.** On Serie A, adding topology helped clustering
-(0.516 vs 0.320); on the unconfounded Premier League corpus it *hurts* it (0.463 vs 0.495)
-while still adding +0.73 pp of classification accuracy. So topology's contribution is marginal
-under supervision and slightly negative for unsupervised structure — a stronger version of the
-same negative result, not a contradiction of it.
+**On Serie A adding topology clearly helps clustering** (0.537 ± 0.019 vs 0.347 ± 0.081 for
+position alone) — the one place in this project where topology earns its keep by a margin
+larger than its noise. **On the Premier League corpus the two are indistinguishable**: 0.463
+against 0.495 with seed standard deviations of 0.145 and 0.184, so the gap is a fraction of the
+spread. An earlier draft called this "topology *hurts* clustering"; three seeds cannot support a
+directional claim about a 0.03 difference, and that wording has been withdrawn. What survives is
+weaker and corpus-dependent: topology's contribution to unsupervised structure is clear on Serie
+A, unmeasurable on the Premier League, and worth under +0.73 pp of supervised accuracy on either.
 
 Stability diagnostics (cosine lift = same-player minus different-player similarity):
 
@@ -333,8 +342,8 @@ instability.
 ### What this actually shows — and what it does not
 
 **The GNN embedding decisively beats classical centrality.** On every measure, by a wide
-margin: 10× the ARI against coarse role at k=4 (0.516 vs 0.051), 4–5× the NMI against
-fine-grained position (0.418 vs 0.076), and roughly double the within-player consistency
+margin: 10× the ARI against coarse role at k=4 (0.537 vs 0.051), 5–6× the NMI against
+fine-grained position (0.426 vs 0.076), and roughly double the within-player consistency
 lift. This is not a close call, and it is not an artefact of a broken baseline — the
 centrality matrix has 100% join coverage, no duplicate keys, and sensible spread on all ten
 metrics. Classical centrality genuinely does not encode role: it measures *how much* a
@@ -404,54 +413,91 @@ model varies between seeds.
 | B0 | scoreline + minutes left | 0.7969 | 0.7504 | **0.7125** |
 | **B1** | + shots, passes, xThreat | **0.7913** | **0.7075** | 0.7305 |
 | B2 | + rolling form, network (GBM) | 0.8014 | 0.7660 | 0.7181 |
-| GNN + Transformer | windowed graph sequences | 0.9902 ± 0.0372 | 0.9012 | 0.9551 |
-
-Premier League secondary metrics: B1 Brier 0.454 / accuracy 0.670 / ECE 0.044; the GNN is
-Brier 0.594 / accuracy 0.522 / ECE 0.162.
+| GNN + Transformer | windowed graph sequences | 0.8629 ± 0.0130 | 0.7336 | 0.8298 |
 
 Paired bootstrap against B0, **resampled by match** (16 correlated rows per match; resampling
 rows would shrink every interval ~4× and manufacture significance):
 
-| Model | PL Δ vs B0 | 95% CI | sig. | Serie A cross Δ | 95% CI | Serie A within Δ | 95% CI |
-|---|---|---|---|---|---|---|---|
-| B1 | −0.0056 | [−0.066, +0.063] | 0/3 | **−0.0429** | [−0.067, −0.018] | +0.0180 | [−0.048, +0.088] |
-| B2 | +0.0045 | [−0.091, +0.094] | 0/3 | +0.0156 | [−0.017, +0.050] | +0.0056 | [−0.062, +0.069] |
-| GNN + Transformer | **+0.1933** | [+0.006, +0.376] | **3/3** | **+0.1508** | [+0.085, +0.220] | **+0.2425** | [+0.079, +0.424] |
+| Model | PL Δ vs B0 | sig. | Serie A cross Δ | sig. | Serie A within Δ | sig. |
+|---|---|---|---|---|---|---|
+| B1 | −0.0056 | 0/3 | **−0.0429** | 3/3 | +0.0180 | 0/3 |
+| B2 | +0.0045 | 0/3 | +0.0156 | 0/3 | +0.0056 | 0/3 |
+| GNN + Transformer | +0.0660 | **0/3** | **−0.0168** | **0/3** | +0.1173 | **1/3** |
 
-Two things replicate across corpora, and one does not:
-
-- **The GNN is significantly worse than B0 in all 9 runs** (3 Premier League seeds + 6 Serie A).
-  This is not an artefact of the provider confound.
-- **B1's advantage over B0 is significant only on the confounded cross-season split.** On both
-  unconfounded splits the CI spans zero — Premier League Δ −0.006 in 0 of 3 seeds, Serie A
-  within-season Δ +0.018 with B0 ahead. The "B1 is the best model" headline is therefore weaker
-  than the cross-season number alone suggests: on a clean split, B0 and B1 are indistinguishable.
+- **B1 remains the best model on every split**, and it is the only rung whose advantage over B0
+  is ever significant — but only on the *confounded* cross-season split. On both unconfounded
+  splits the CI spans zero (PL Δ −0.006, Serie A within-season Δ +0.018 with B0 ahead). So "B1 is
+  the best model" is weaker than the cross-season number alone suggests.
+- **The GNN is now indistinguishable from B0 on two of three splits** and significantly worse in
+  only 1 of 9 runs. On Serie A cross-season its point estimate is *better* than B0 (Δ −0.0168),
+  though the interval spans zero and B1 still beats it. Treat that one with the same suspicion as
+  B1's: an advantage that appears only on the confounded split is a property of that setting.
 - B2 is indistinguishable from B0 everywhere.
 
-### Why the GNN loses — measured, not assumed
+### The negative result was largely an optimiser bug — and that is the honest headline
 
+**Earlier versions of this README reported the GNN as significantly worse than B0 in all 9 runs
+and attributed it to too few independent training labels. Both claims were wrong.**
+
+Two measurements overturned them, in order:
+
+**1. The data-scarcity explanation does not survive contact with a learning curve.**
 `scripts/estimate_ceiling.py` fits the ladder on random subsets of the pooled 1,140-match corpus
-(subsampled **by match**, 5 draws per size) and scores each on a fixed held-out fold:
+(subsampled **by match**, 5 draws per size):
 
-| Rung | 280 → 560 train matches | subsample noise | verdict |
+| Rung | 280 → 560 train matches (Serie A fold) | subsample noise | verdict |
 |---|---|---|---|
-| B0 | 0.7494 → 0.7456 (Serie A fold) | 0.0058 | **plateaued** |
-| B1 | 0.7257 → 0.7090 (Serie A fold) | 0.0118 | still improving, barely |
-| B2 | 0.9586 → 0.7785 (Serie A fold) | 0.0550 | far from converged |
+| B0 | 0.7494 → 0.7456 | 0.0058 | **plateaued** |
+| B1 | 0.7257 → 0.7090 | 0.0118 | still improving, barely |
+| B2 | 0.9586 → 0.7785 | 0.0550 | far from converged |
 
-**B0 saturates at roughly 280 matches, and the total headroom beneath it is only ~0.037
-log-loss** (B1's best, 0.709, against B0's 0.746). The GNN's deficit is +0.15 to +0.24 —
-four to six times that entire headroom. **More data therefore cannot explain or fix it**, and an
-earlier version of this README claimed it could; that claim is retracted.
+B0 saturates by ~280 matches and the whole headroom beneath it is **~0.037 log-loss** — far less
+than the GNN's then-deficit of +0.15 to +0.24. More data could not have closed that gap.
 
-What remains: best validation epoch is **0, 1, 1, 0, 1, 4, 17, 3** across the eight seeded runs,
-i.e. the model is essentially never better than initialisation-plus-one-step. That is the
-signature of an optimisation failure, not of label scarcity. Three concrete suspects, with
-`docs/ROADMAP.md` carrying the plan: batch size is effectively 1 (one optimiser step per match,
-no gradient accumulation); the loss weights all 16 checkpoints equally although minute-15
-outcome is near-irreducible; and `state_head` is a parallel linear path rather than a residual on
-a *fitted* baseline, so the model must rediscover B1 by gradient descent instead of starting from
-it.
+**2. The optimiser was the cause.** `optimiser.step()` sat inside the per-match loop, so batch
+size was literally **1**: ~260–300 updates per epoch, each from one match's 16 heavily-correlated
+checkpoints. Best validation epoch was 0 or 1 in 6 of 8 runs — a model never better than
+initialisation-plus-one-step. Batching 16 matches per step (and encoding all window graphs in one
+PyG pass) changes the result:
+
+| | batch = 1 | batch = 16 |
+|---|---|---|
+| PL matchweek | 0.9902, Δ +0.1933, **3/3 significant** | **0.8629**, Δ +0.0660, 0/3 |
+| Serie A cross-season | 0.9012, Δ +0.1508, **3/3 significant** | **0.7336**, Δ **−0.0168**, 0/3 |
+| Serie A within-season | 0.9551, Δ +0.2425, **3/3 significant** | **0.8298**, Δ +0.1173, 1/3 |
+| Significantly worse than B0 | **9 of 9 runs** | **1 of 9 runs** |
+| Best validation epoch | 0–3 | 1–28, median 7 |
+| ECE (Serie A cross-season) | 0.128 | **0.045** |
+| Wall time, 6 configs | 663 s | **145 s** |
+
+Controlled: given an **identical 6-configuration budget** batch=1 reproduced its own 3-config
+result exactly (the extra learning rate was never selected), and every batch-16 configuration beat
+every batch-1 configuration on validation with no overlap. So the gain is the batching, not a
+wider search.
+
+**A second inference also has to be withdrawn.** The capacity sweep previously chose the
+*smallest* model (5k–13k params) in 7 of 8 runs, which was reported as evidence that the corpus
+could not support capacity. What batching actually did was make capacity **roughly neutral**, not
+make bigger better — the spread between the best 5k, 13k and 77k configuration collapsed from
+**0.25–0.28 to a mean of 0.038** log-loss:
+
+| | 5k | 13k | 77k | spread |
+|---|---|---|---|---|
+| batch = 1 (PL seed 0) | **0.908** | 0.912 | 1.190 | 0.282 |
+| batch = 16 (PL seed 0) | 0.833 | 0.851 | **0.800** | 0.051 |
+
+Across the 9 canonical runs the winner is now 13k four times, 5k three times and 77k twice — the
+largest model went from *consistently worst* to *competitive and sometimes best*, which is why the
+old inference fails. It is not that the corpus wants a big model; it is that at batch size 1 extra
+parameters were only extra surface for single-match gradient noise, so the sweep's preference was
+measuring the optimiser rather than the corpus.
+
+What is still true: the GNN does not *beat* B1 anywhere, it still overfits after its validation
+minimum, and best-epoch remains inconsistent across seeds (6, 1, 2 on the Premier League). Two
+further fixes are specified and unbuilt in `docs/ROADMAP.md`: weighting the loss by checkpoint
+(minute-15 outcome is near-irreducible, yet costs as much as minute-90), and making `state_head` a
+residual on a *fitted* B1 rather than a parallel linear path, so "learn nothing" would mean "match
+B1" instead of "fail".
 
 Also measured: **pooling the corpora is safe and mildly useful** — B0 −0.005 to −0.011, B1 −0.017
 on the Premier League fold, B2 −0.17 to −0.23. Cross-provider training needs no domain adaptation
@@ -464,19 +510,25 @@ over the scoreline. But on the **unconfounded within-season control, B0 wins** a
 indistinguishable from it — with 60 test matches the intervals overlap heavily, so B1's
 advantage may be specific to the cross-season setting rather than general.
 
-**The GNN+Transformer fails, and the cause is measured rather than guessed.** Train loss falls
-1.30 → 0.59 while validation loss rises 0.89 → 2.55: with **300 independent training labels**
-a 13k–77k parameter sequence model memorises the training set. Three fixes were tried and none
-changed the conclusion:
+**The GNN+Transformer does not beat B1, but it no longer loses to B0 — and getting there
+required admitting the first diagnosis was wrong.** The original write-up attributed the failure
+to 300 independent training labels and reported that three val-guided fixes had not helped
+(learning rate 1e-3 → 3e-4 with patience 8 → 25; a residual path from the scalar state to the
+logits, so the model can trivially recover the tabular baseline; a capacity sweep over 5k/13k/77k
+params selected on validation). Those three are still in place and still correct design — the
+residual path in particular is what stops the comparison conflating "graphs do not help" with
+"the network failed to relearn goal difference".
 
-1. Learning rate 1e-3 → 3e-4 with patience 8 → 25, after the val curve showed violent
-   oscillation (0.81 → 1.16 → 0.89 → 1.25) and a stop at epoch 9 with the best score at epoch 0.
-2. A **residual path from the scalar state to the logits**, so the model can trivially recover
-   the tabular baseline. This is the correct experimental design — without it the comparison
-   conflates "graphs do not help" with "the network failed to relearn goal difference".
-3. A **capacity sweep (5k / 13k / 77k params) selected on validation**, never on test.
+What they could not fix was that `optimiser.step()` ran **once per match**. Batching 16 matches
+per step moved the result from "significantly worse than B0 in 9 of 9 runs" to **1 of 9**, and
+`scripts/estimate_ceiling.py` had already shown that the data-scarcity story was untenable:
+B0 plateaus at ~280 matches with ~0.037 log-loss of headroom, far less than the deficit the
+batching removed. See the section above for the controlled before/after.
 
-Further tuning would be fishing on the test set, so the negative result stands.
+The remaining honest position: the graph sequence model is **indistinguishable from B0** on two
+of three splits and still **loses to B1 everywhere**. Two specified fixes are unbuilt
+(checkpoint-weighted loss; residual on a *fitted* B1), so this is not a settled negative result —
+it is an open one.
 
 **Two label caveats, reported not hidden.** The derived running scoreline reproduces the
 recorded final score for **758/760 games (99.7%)**; the two failures are Wyscout matches where
@@ -701,17 +753,18 @@ pytest                                       # 74 tests
   short training schedules. These are proof-of-concept results, not state-of-the-art claims.
 - **Three seeds** per configuration. Enough to show the ablation ordering is stable; not
   enough for tight confidence intervals on a ~1 pp effect.
-- **Module 3's negative result is not explained by data volume, and an earlier version of this
-  README said it was.** `scripts/estimate_ceiling.py` measures the learning curve directly:
-  **B0 plateaus by ~280 training matches** (doubling to 560 moves it −0.002 to −0.004, inside
-  subsample noise) and the **total headroom below B0 is only ~0.037 log-loss**. The GNN's
-  deficit is +0.15 to +0.24 — four to six times that headroom. More data therefore cannot
-  rescue it. The live suspects are optimisation and formulation: batch size is effectively 1
-  (one optimiser step per match, no accumulation), the loss weights all 16 checkpoints equally
-  even though minute-15 outcome is near-irreducible, and `state_head` is a parallel linear path
-  rather than a residual on a fitted baseline. Best validation epoch is 0 or 1 in 6 of 8 runs,
-  which is the signature of a model that never gets a usable gradient — not of one starved of
-  labels. The negative result stands as reported; its *stated cause* was wrong.
+- **Module 3's negative result was largely an optimiser bug, and two earlier claims in this
+  README were wrong.** It first said the GNN's deficit was caused by too few independent
+  training labels; a measured learning curve refuted that (B0 plateaus by ~280 matches, total
+  headroom ~0.037 log-loss, against a deficit of +0.15 to +0.24). It then said the deficit was
+  robust across 9 runs; fixing `optimiser.step()` — which ran once per match, i.e. batch size 1
+  — cut "significantly worse than B0" from **9 of 9 runs to 1 of 9**. A third claim, that the
+  capacity sweep's preference for the smallest model showed the corpus could not support
+  capacity, also fell: with batching it prefers the largest. **The methodology around the result
+  was sound — temporal splits, per-match bootstrap, a val-only sweep — but none of it protects
+  against a wrong training loop, and the model had no unit tests at all until this was found.**
+  Two specified-but-unbuilt fixes remain in `docs/ROADMAP.md`: checkpoint-weighted loss, and a
+  residual on a *fitted* B1 rather than a parallel linear path.
 - **The Module 3 running scoreline is 99.7% faithful** (758/760 games). Two Wyscout matches are
   missing a goal from the event stream entirely; no substitute goal was invented.
 - **Module 4's shot-precursor analysis is associational.** A cluster with a 57% shot rate

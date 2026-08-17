@@ -32,7 +32,13 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from scipy import stats  # noqa: E402
 
-from tacticalgraph.config import CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402, SERIE_A_STATSBOMB, SERIE_A_WYSCOUT  # noqa: E402
+from tacticalgraph.config import (  # noqa: E402
+    CORPORA,
+    DEFAULT_CORPUS,
+    SERIE_A_STATSBOMB,
+    SERIE_A_WYSCOUT,
+    Paths,
+)
 from tacticalgraph.data.enrichment import load_enrichment  # noqa: E402
 from tacticalgraph.data.possession import (  # noqa: E402
     evaluate_possessions,
@@ -270,6 +276,19 @@ def main() -> int:
         format="%(asctime)s %(levelname)-7s | %(message)s",
         datefmt="%H:%M:%S",
     )
+    # This script *is* the cross-provider comparison: every section below contrasts the
+    # StatsBomb season against the Wyscout one. On a single-provider corpus each comparison
+    # would silently reduce to an empty frame and still write a report, so refuse instead.
+    required = {SERIE_A_STATSBOMB.key, SERIE_A_WYSCOUT.key}
+    available = {season.key for season in CORPORA[args.corpus].seasons}
+    if not required <= available:
+        log.error(
+            "corpus %r has seasons %s; harmonisation validation compares %s and is only "
+            "defined on a multi-provider corpus. Nothing to validate -- exiting.",
+            args.corpus, sorted(available), sorted(required),
+        )
+        return 2
+
     paths = Paths.load(args.corpus).ensure()
     actions = read_actions(paths)
     log.info(

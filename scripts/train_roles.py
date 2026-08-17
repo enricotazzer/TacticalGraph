@@ -23,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-import torch  # noqa: E402
 
 from tacticalgraph.config import ALL_SPLIT_KINDS, CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402
 from tacticalgraph.data.aliases import match_players  # noqa: E402
