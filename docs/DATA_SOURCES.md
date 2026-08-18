@@ -113,6 +113,30 @@ Midfielders are 33% of the population and 84% of the top 50 by degree; forwards 
 goalkeepers are effectively unrankable. The metrics also *disagree* about who is central,
 which is itself evidence that none of them measures tactical importance.
 
+**This is not a harmonisation artefact — it replicates on the clean corpus.** Measured on
+359 Premier League players with ≥10 matches (single provider, no cross-provider mapping),
+share of the top 50 across all ten metrics:
+
+| Metric | GK | DEF | MID | FWD |
+|---|---|---|---|---|
+| `degree_in` | 0% | 4% | 78% | 18% |
+| `degree_out` | 0% | 22% | 74% | 4% |
+| `degree_total` | 0% | 8% | **84%** | 8% |
+| `strength_in` | 0% | 24% | 60% | 16% |
+| `strength_out` | 0% | **48%** | 50% | 2% |
+| `betweenness` | 0% | 30% | 66% | 4% |
+| `closeness` | 0% | 30% | 48% | 22% |
+| `eigenvector` | 0% | 10% | 78% | 12% |
+| `pagerank` | 0% | 10% | 76% | 14% |
+| `clustering` | 0% | 22% | 68% | 10% |
+| *population* | 8% | 35% | 31% | 26% |
+
+Same shape as Serie A. Midfielders are 31% of the population and 84% of the top 50 by
+`degree_total`, and goalkeepers take **0% on all ten metrics** — not one keeper is rankable by
+any of them. The metrics also contradict each other: `degree_total` reads 84% MID, while
+`strength_out` reads 48% DEF / 50% MID. They cannot all be measuring tactical importance, and
+the simpler reading is that none of them is. The cause is the pass-only graph, not the provider.
+
 The actions that would fix this fail provider comparability on the Serie A corpus
 (`tackle` 0.24×, `interception` 3.27×, `clearance` 0.63×, `dribble` 0.11×, `bad_touch` 0.00×
 Wyscout-over-StatsBomb per game) — but on the single-provider Premier League corpus **that
@@ -120,3 +144,30 @@ objection does not apply**, so defensive and carry actions are usable there. Out
 however, event data observes only 105.8 team actions per game with a **median of 3-4 per
 player** and only ~5 of 11 players reaching 5 events, so a defensive *graph* remains
 unbuildable from events regardless of provider. That is a tracking problem, not a schema one.
+
+### Partial mitigation: role-relative z-scoring
+
+`role_relative_metrics` in `src/tacticalgraph/features/centrality.py` z-scores each metric
+within `coarse_role`. Top-50 composition on the same Premier League corpus, before and after:
+
+| Metric | Ranking | GK | DEF | MID | FWD |
+|---|---|---|---|---|---|
+| `degree_total` | raw | 0% | 8% | 84% | 8% |
+| `degree_total` | role-relative | 6% | 36% | 32% | 26% |
+| `pagerank` | raw | 0% | 10% | 76% | 14% |
+| `pagerank` | role-relative | 10% | 34% | 30% | 26% |
+| `betweenness` | raw | 0% | 30% | 66% | 4% |
+| `betweenness` | role-relative | 10% | 34% | 36% | 20% |
+| `strength_out` | raw | 0% | 48% | 50% | 2% |
+| `strength_out` | role-relative | 6% | 42% | 28% | 24% |
+| *population* | — | 8% | 35% | 31% | 26% |
+
+A goalkeeper is rankable for the first time: Costel Pantilimon, `pagerank_z` = **+2.12**.
+
+**The post-z-score composition tracking the population is largely true by construction, and is
+not evidence the graph got better.** Z-scoring within role forces the top-50 mix toward the
+population mix; the agreement is mechanical, not a finding. What it actually buys is narrower:
+"unusually central *for a centre-back*" becomes expressible, and keepers and forwards get a
+ranking at all instead of none. It does **not** show that the graph measures tactical importance
+rather than volume. That claim needs the richer edge and threat features, which are still being
+built.

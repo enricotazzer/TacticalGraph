@@ -57,6 +57,7 @@ from tacticalgraph.features.match_state import (  # noqa: E402
     build_state_table,
     match_outcomes,
 )
+from tacticalgraph.features.xthreat import fit_xthreat  # noqa: E402
 from tacticalgraph.models.outcome_baselines import make_model  # noqa: E402
 
 log = logging.getLogger("estimate_ceiling")
@@ -98,15 +99,6 @@ def prepare_corpus(slug: str) -> tuple[pd.DataFrame, pd.DataFrame, str]:
         state["fold"].value_counts().to_dict(),
     )
     return state, games, kind
-
-
-def fit_xthreat(actions: pd.DataFrame, train_game_ids: set[int]) -> pd.Series:
-    """Fit xThreat on training games only, so the test fold never shapes its own features."""
-    from socceraction.xthreat import ExpectedThreat
-
-    model = ExpectedThreat(l=16, w=12)
-    model.fit(actions[actions["game_id"].isin(train_game_ids)])
-    return pd.Series(model.rate(actions), index=actions.index)
 
 
 def fit_and_score(

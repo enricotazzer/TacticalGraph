@@ -498,11 +498,13 @@ def test_window_features_are_not_computable_from_later_windows():
     import pandas as pd
 
     from tacticalgraph.models.outcome_gnn_transformer import build_window_features
-    from tacticalgraph.models.role_gnn import TOPOLOGY_FEATURES
+    from tacticalgraph.models.role_gnn import DIRECTION_FEATURES, TOPOLOGY_FEATURES
 
     nodes, edges = _windowed_tables()
     full = build_window_features(nodes, edges)
-    columns = ["player_id", *TOPOLOGY_FEATURES]
+    # Direction features included: they are newer than this test and travel the same windowed
+    # path, so leaving them out would let the identical bug recur unnoticed.
+    columns = ["player_id", *TOPOLOGY_FEATURES, *DIRECTION_FEATURES]
 
     for checkpoint in (0, 5, 11):
         truncated = build_window_features(
@@ -534,7 +536,8 @@ def test_edge_derived_window_features_vary_between_windows():
     features = build_window_features(nodes, edges)
 
     for column in ("degree_in_norm", "degree_out_norm", "strength_in_norm",
-                   "strength_out_norm", "edge_share_in", "edge_share_out"):
+                   "strength_out_norm", "edge_share_in", "edge_share_out",
+                   "progression_made", "progression_received", "progressive_share"):
         varies = features.groupby("player_id")[column].nunique()
         assert (varies > 1).any(), (
             f"{column} is identical across all 16 windows for every player, which means it was "

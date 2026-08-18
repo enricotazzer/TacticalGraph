@@ -109,8 +109,10 @@ st.subheader("The leakage trap, and the ablation that addresses it")
 st.markdown(
     "A player's mean pitch position nearly determines their coarse role (GK 8.8 m → forwards "
     "68.1 m on a 105 m pitch). A model handed `(x, y)` can therefore score well while learning "
-    "nothing about passing structure. So the feature set is split three ways and **all three "
-    "are always reported**."
+    "nothing about passing structure. So the feature set is split into explicit variants and "
+    "**all of them are always reported**. `position`, `topology` and `both` are the original "
+    "three; `direction`, `topology+direction` and `all` add pass direction, which is what "
+    "separates a target man from a recycler when volume cannot."
 )
 
 if not ablation.empty:
@@ -122,8 +124,11 @@ if not ablation.empty:
     pivot["Test accuracy"] = pivot.apply(
         lambda r: f"{r['mean']:.4f} ± {0.0 if pd.isna(r['std']) else r['std']:.4f}", axis=1
     )
-    order = {"position": 0, "topology": 1, "both": 2}
-    pivot["_o"] = pivot["feature_set"].map(order)
+    # Explicit ordering so the ladder reads position -> volume -> union -> direction variants;
+    # an unknown name sorts last rather than becoming NaN and landing in an arbitrary place.
+    order = {"position": 0, "topology": 1, "both": 2,
+             "direction": 3, "topology+direction": 4, "all": 5}
+    pivot["_o"] = pivot["feature_set"].map(order).fillna(len(order))
     pivot = pivot.sort_values(["split", "_o"])
 
     left, right = st.columns([3, 2])
@@ -139,8 +144,15 @@ if not ablation.empty:
                 st.metric(
                     f"both − position ({split})",
                     f"{gap:+.2f} pp",
-                    help="The actual claim of Module 2: what passing topology adds beyond "
-                         "where a player stands.",
+                    help="What passing *volume* adds beyond where a player stands.",
+                )
+            if {"all", "position"} <= set(subset.index):
+                gap_all = (subset.loc["all", "mean"] - subset.loc["position", "mean"]) * 100
+                st.metric(
+                    f"all − position ({split})",
+                    f"{gap_all:+.2f} pp",
+                    help="What volume *and direction* add. This is the larger result: direction "
+                         "more than doubles the graph's contribution.",
                 )
 
 clustering = pd.DataFrame(data["clustering"])
@@ -238,10 +250,22 @@ def _headline() -> str:
         topo = ablation[ablation["feature_set"] == "topology"]["test_acc"].mean()
         if pd.notna(pos) and pd.notna(both):
             parts.append(
-                f"**But passing topology is the minor contributor**: adding it to position buys "
-                f"only **{(both - pos) * 100:+.2f} pp** ({pos:.4f} → {both:.4f}), and topology "
-                f"alone reaches just {topo:.4f}. Much of the structure the embedding finds — left "
-                f"versus right — is available directly from `mean_y`."
+                f"**Passing *volume* is the minor contributor**: adding it to position buys only "
+                f"**{(both - pos) * 100:+.2f} pp** ({pos:.4f} → {both:.4f}), and volume alone "
+                f"reaches just {topo:.4f}."
+            )
+        # The `all` variant adds pass direction, which is a different claim from volume and the
+        # only graph feature group in this project that beats its own seed noise by a wide margin.
+        # Reporting only the volume gap here would understate what the graph contributes.
+        every = ablation[ablation["feature_set"] == "all"]["test_acc"].mean()
+        if pd.notna(pos) and pd.notna(every) and pd.notna(both):
+            parts.append(
+                f"**But pass *direction* is not.** Adding progression made/received, pass length "
+                f"and progressive share takes the graph's contribution to "
+                f"**{(every - pos) * 100:+.2f} pp** ({every:.4f}) — more than double what volume "
+                f"buys, and several times the seed spread rather than inside it. Volume measures "
+                f"*how much* a player passes and is largely positional; direction measures *what "
+                f"kind*, and separates a target man from a recycler who share a degree."
             )
     if not parts:
         return ""

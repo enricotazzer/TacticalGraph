@@ -60,10 +60,33 @@ TOPOLOGY_FEATURES: tuple[str, ...] = (
     "edge_share_out",
 )
 
+# A pass is "progressive" if it gains this many metres towards the opponent goal. 5 m is a low
+# bar deliberately: the aim is to separate forward intent from square/backward recycling, not to
+# reproduce a broadcaster's definition of a line-breaking pass.
+PROGRESSIVE_DX_METRES: float = 5.0
+
+# What kind of pass, rather than how many. Every feature in TOPOLOGY_FEATURES is a volume
+# measure, which is why centrality built on them is a positional proxy -- midfielders take 84% of
+# the top 50 by degree against a 31% population share, and goalkeepers 0% on all ten. These four
+# are computed from `mean_dx`/`mean_length`, which have sat unused on the edge table since
+# Module 1, and they separate players volume cannot: a target man and a deep recycler can have
+# identical degree while one receives +14 m passes and the other -1 m.
+DIRECTION_FEATURES: tuple[str, ...] = (
+    "progression_made",
+    "progression_received",
+    "pass_length_made",
+    "progressive_share",
+)
+
 FEATURE_SETS: dict[str, tuple[str, ...]] = {
     "position": POSITION_FEATURES,
     "topology": TOPOLOGY_FEATURES,
     "both": POSITION_FEATURES + TOPOLOGY_FEATURES,
+    # Added later; the three above are left exactly as they were so the published ablation and
+    # its +0.73 pp topology contribution stay comparable rather than being silently restated.
+    "direction": DIRECTION_FEATURES,
+    "topology+direction": TOPOLOGY_FEATURES + DIRECTION_FEATURES,
+    "all": POSITION_FEATURES + TOPOLOGY_FEATURES + DIRECTION_FEATURES,
 }
 
 
@@ -194,6 +217,58 @@ def engineer_node_features(
         frame["passes_completed"], frame["passes_attempted"]
     )
     frame["touches"] = _safe_ratio(frame["touches"], frame["team_touches"])
+
+    # ------------------------------------------------------------------ direction features
+    #
+    # Vectorised on purpose. A groupby-apply computing a weighted mean per player is minutes on
+    # the windowed edge table (~473k rows on the Premier League); pre-multiplying and summing is
+    # seconds. The weighted mean of an edge attribute is sum(weight * attr) / sum(weight).
+    #
+    # Note these are the only features here NOT expressed as a share of the team's total:
+    # `progression_*` and `pass_length_made` are in metres. The scaler standardises them on the
+    # training fold, so absolute scale is handled, but any provider difference in how pass end
+    # points are annotated will show up here as a distribution shift rather than being normalised
+    # away. `progressive_share` is a share and is the provider-robust member of the group.
+    direction_defaults = dict.fromkeys(DIRECTION_FEATURES, 0.0)
+    if edges.empty:
+        # A team with no completed passes in the window. Zero is the honest reading of "no
+        # evidence of direction", and matches how the volume features treat the same case.
+        frame = frame.assign(**direction_defaults)
+        return frame
+
+    weighted = edges[keys + ["source", "target", "weight"]].copy()
+    weighted["_w_dx"] = edges["weight"] * edges["mean_dx"]
+    weighted["_w_len"] = edges["weight"] * edges["mean_length"]
+    weighted["_w_prog"] = edges["weight"] * (edges["mean_dx"] > PROGRESSIVE_DX_METRES)
+
+    made = (
+        weighted.groupby(keys + ["source"])
+        .agg(_w=("weight", "sum"), _wdx=("_w_dx", "sum"),
+             _wlen=("_w_len", "sum"), _wprog=("_w_prog", "sum"))
+        .reset_index()
+        .rename(columns={"source": "player_id"})
+    )
+    made["progression_made"] = _safe_ratio(made["_wdx"], made["_w"])
+    made["pass_length_made"] = _safe_ratio(made["_wlen"], made["_w"])
+    made["progressive_share"] = _safe_ratio(made["_wprog"], made["_w"])
+
+    received = (
+        weighted.groupby(keys + ["target"])
+        .agg(_w=("weight", "sum"), _wdx=("_w_dx", "sum"))
+        .reset_index()
+        .rename(columns={"target": "player_id"})
+    )
+    received["progression_received"] = _safe_ratio(received["_wdx"], received["_w"])
+
+    frame = frame.merge(
+        made[keys + ["player_id", "progression_made", "pass_length_made", "progressive_share"]],
+        on=keys + ["player_id"], how="left",
+    ).merge(
+        received[keys + ["player_id", "progression_received"]],
+        on=keys + ["player_id"], how="left",
+    )
+    # A player who received but never made a pass (or vice versa) has no row on one side.
+    frame[list(DIRECTION_FEATURES)] = frame[list(DIRECTION_FEATURES)].fillna(0.0)
 
     return frame
 

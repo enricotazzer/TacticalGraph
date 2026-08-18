@@ -46,6 +46,7 @@ from tacticalgraph.features.match_state import (  # noqa: E402
     derive_goals,
     match_outcomes,
 )
+from tacticalgraph.features.xthreat import fit_xthreat  # noqa: E402
 from tacticalgraph.models.outcome_baselines import feature_importance, fit_ladder  # noqa: E402
 
 log = logging.getLogger("train_outcome")
@@ -99,27 +100,6 @@ def validate_goal_derivation(actions: pd.DataFrame, outcomes: pd.DataFrame) -> d
             "match_rate": round(rate, 4), "examples": examples}
 
 
-def fit_xthreat(actions: pd.DataFrame, train_game_ids: set[int]) -> pd.Series:
-    """Fit xThreat on the training games only and rate every action.
-
-    Fitting on the whole corpus would let the 2017/18 test season shape the value surface that
-    its own features are then built from.
-    """
-    from socceraction.xthreat import ExpectedThreat
-
-    train_actions = actions[actions["game_id"].isin(train_game_ids)]
-    model = ExpectedThreat(l=16, w=12)
-    model.fit(train_actions)
-    values = model.rate(actions)
-    log.info(
-        "xT fitted on %d train games; rated %d/%d actions (rest are non-move actions)",
-        train_actions["game_id"].nunique(),
-        int(np.sum(~np.isnan(values))),
-        len(values),
-    )
-    return pd.Series(values, index=actions.index)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -155,6 +135,12 @@ def main() -> int:
         choices=CHECKPOINT_WEIGHT_SCHEMES,
         help="per-checkpoint training weight schemes to sweep on validation "
              f"(default: all of {', '.join(CHECKPOINT_WEIGHT_SCHEMES)})",
+    )
+    parser.add_argument(
+        "--node-features", choices=("volume", "volume+direction"), default="volume",
+        help="graph node features. 'volume' is the ten count-based topology features; "
+             "'volume+direction' adds pass progression made/received, length and progressive "
+             "share, which more than double the graph's contribution in Module 2's ablation.",
     )
     parser.add_argument(
         "--corpus", default=DEFAULT_CORPUS, choices=sorted(CORPORA),
@@ -217,14 +203,17 @@ def main() -> int:
             CHECKPOINT_WEIGHT_SCHEMES as MODEL_SCHEMES,
         )
         from tacticalgraph.models.outcome_gnn_transformer import (
+            NODE_FEATURE_SETS,
             SEQUENCE_STATE_FEATURES,
-            WINDOW_NODE_FEATURES,
             build_window_features,
             checkpoint_weights,
             make_sequences,
             predict_proba,
             train_outcome_model,
         )
+
+        node_columns = NODE_FEATURE_SETS[args.node_features]
+        log.info("node features: %s (%d columns)", args.node_features, len(node_columns))
 
         assert tuple(MODEL_SCHEMES) == CHECKPOINT_WEIGHT_SCHEMES, (
             "checkpoint weight schemes drifted between this script and the model module: "
@@ -252,15 +241,15 @@ def main() -> int:
         window_features = build_window_features(window_nodes, window_edges)
         train_sequences, scaler = make_sequences(
             folds["train"], window_features, window_edges, outcomes,
-            base_logit_columns=base_columns,
+            base_logit_columns=base_columns, node_columns=node_columns,
         )
         val_sequences, _ = make_sequences(
             folds["val"], window_features, window_edges, outcomes, scaler=scaler,
-            base_logit_columns=base_columns,
+            base_logit_columns=base_columns, node_columns=node_columns,
         )
         test_sequences, _ = make_sequences(
             folds["test"], window_features, window_edges, outcomes, scaler=scaler,
-            base_logit_columns=base_columns,
+            base_logit_columns=base_columns, node_columns=node_columns,
         )
         log.info(
             "sequences: %d train / %d val / %d test matches",
@@ -311,7 +300,7 @@ def main() -> int:
             candidate, history = train_outcome_model(
                 train_sequences,
                 val_sequences,
-                node_in_channels=len(WINDOW_NODE_FEATURES),
+                node_in_channels=len(node_columns),
                 state_in_channels=len(SEQUENCE_STATE_FEATURES),
                 epochs=args.epochs,
                 device=args.device,
@@ -480,6 +469,7 @@ def main() -> int:
         "gnn_arm": {
             "baseline_residual": args.baseline_residual,
             "checkpoint_weight_schemes": list(schemes) if not args.skip_gnn else [],
+            "node_features": args.node_features,
             "batch_size": args.batch_size,
         },
         "resources": [r for r in (state_monitor.as_dict(), ladder_monitor.as_dict(), gnn_resources) if r],

@@ -46,6 +46,7 @@ from torch_geometric.nn import SAGEConv, global_mean_pool
 
 from tacticalgraph.features.match_state import B1_FEATURES
 from tacticalgraph.models.role_gnn import (
+    DIRECTION_FEATURES,
     TOPOLOGY_FEATURES,
     WINDOW_KEYS,
     engineer_node_features,
@@ -57,6 +58,20 @@ log = logging.getLogger(__name__)
 # shape of the network, and mean location is what makes it a *passing shape* rather than an
 # abstract graph.
 WINDOW_NODE_FEATURES: tuple[str, ...] = ("mean_x", "mean_y") + TOPOLOGY_FEATURES
+
+# The same, plus pass direction. Every feature in TOPOLOGY_FEATURES measures *how much* a player
+# passes, and on Module 2's ablation that volume buys only ~+1 pp over pitch position alone --
+# adding direction takes it to +2.65 pp, more than doubling the graph's contribution. Whether
+# that carries over to a sequence model is a separate question, which is why this is a selectable
+# variant rather than a silent change to the default.
+WINDOW_NODE_FEATURES_WITH_DIRECTION: tuple[str, ...] = (
+    WINDOW_NODE_FEATURES + DIRECTION_FEATURES
+)
+
+NODE_FEATURE_SETS: dict[str, tuple[str, ...]] = {
+    "volume": WINDOW_NODE_FEATURES,
+    "volume+direction": WINDOW_NODE_FEATURES_WITH_DIRECTION,
+}
 
 # Scalar state appended to each token. B1 rather than B2: the graph is meant to supply the
 # structural information, so handing it B2's network summaries too would double-count.

@@ -7,45 +7,90 @@
     {
       "feature_set": "position",
       "n_features": 4,
-      "train_acc": 0.8708,
-      "val_acc": 0.8415,
-      "test_acc": 0.8523,
+      "train_acc": 0.8702,
+      "val_acc": 0.8433,
+      "test_acc": 0.8515,
       "epochs_run": 27,
       "resources": {
         "name": "gnn-position",
-        "seconds": 117.49,
-        "peak_rss_mb": 734.1,
-        "gpu_peak_mb": 1.5,
+        "seconds": 5.66,
+        "peak_rss_mb": 581.2,
+        "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
     },
     {
       "feature_set": "topology",
       "n_features": 10,
-      "train_acc": 0.785,
-      "val_acc": 0.7667,
-      "test_acc": 0.7597,
-      "epochs_run": 25,
+      "train_acc": 0.7867,
+      "val_acc": 0.7637,
+      "test_acc": 0.7459,
+      "epochs_run": 31,
       "resources": {
         "name": "gnn-topology",
-        "seconds": 111.41,
-        "peak_rss_mb": 778.0,
-        "gpu_peak_mb": 7.6,
+        "seconds": 6.57,
+        "peak_rss_mb": 601.5,
+        "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
     },
     {
       "feature_set": "both",
       "n_features": 14,
-      "train_acc": 0.8915,
-      "val_acc": 0.8667,
-      "test_acc": 0.8612,
-      "epochs_run": 30,
+      "train_acc": 0.8838,
+      "val_acc": 0.8713,
+      "test_acc": 0.8539,
+      "epochs_run": 26,
       "resources": {
         "name": "gnn-both",
-        "seconds": 131.26,
-        "peak_rss_mb": 738.0,
-        "gpu_peak_mb": 12.4,
+        "seconds": 5.44,
+        "peak_rss_mb": 614.1,
+        "gpu_peak_mb": 0.0,
+        "device": "mps (Apple Silicon)"
+      }
+    },
+    {
+      "feature_set": "direction",
+      "n_features": 4,
+      "train_acc": 0.767,
+      "val_acc": 0.7456,
+      "test_acc": 0.7427,
+      "epochs_run": 20,
+      "resources": {
+        "name": "gnn-direction",
+        "seconds": 4.22,
+        "peak_rss_mb": 625.5,
+        "gpu_peak_mb": 0.0,
+        "device": "mps (Apple Silicon)"
+      }
+    },
+    {
+      "feature_set": "topology+direction",
+      "n_features": 14,
+      "train_acc": 0.862,
+      "val_acc": 0.8386,
+      "test_acc": 0.8344,
+      "epochs_run": 33,
+      "resources": {
+        "name": "gnn-topology+direction",
+        "seconds": 7.03,
+        "peak_rss_mb": 631.5,
+        "gpu_peak_mb": 0.0,
+        "device": "mps (Apple Silicon)"
+      }
+    },
+    {
+      "feature_set": "all",
+      "n_features": 18,
+      "train_acc": 0.8974,
+      "val_acc": 0.876,
+      "test_acc": 0.8734,
+      "epochs_run": 18,
+      "resources": {
+        "name": "gnn-all",
+        "seconds": 3.83,
+        "peak_rss_mb": 639.8,
+        "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
     }
@@ -84,6 +129,48 @@
       "strength_out_norm",
       "edge_share_in",
       "edge_share_out"
+    ],
+    "direction": [
+      "progression_made",
+      "progression_received",
+      "pass_length_made",
+      "progressive_share"
+    ],
+    "topology+direction": [
+      "touches",
+      "passes_attempted",
+      "passes_completed",
+      "pass_completion_rate",
+      "degree_in_norm",
+      "degree_out_norm",
+      "strength_in_norm",
+      "strength_out_norm",
+      "edge_share_in",
+      "edge_share_out",
+      "progression_made",
+      "progression_received",
+      "pass_length_made",
+      "progressive_share"
+    ],
+    "all": [
+      "mean_x",
+      "mean_y",
+      "spread_x",
+      "spread_y",
+      "touches",
+      "passes_attempted",
+      "passes_completed",
+      "pass_completion_rate",
+      "degree_in_norm",
+      "degree_out_norm",
+      "strength_in_norm",
+      "strength_out_norm",
+      "edge_share_in",
+      "edge_share_out",
+      "progression_made",
+      "progression_received",
+      "pass_length_made",
+      "progressive_share"
     ]
   },
   "clustering": [
@@ -97,31 +184,58 @@
       "nmi_fine24": 0.0818
     },
     {
+      "representation": "gnn-all",
+      "k": 4,
+      "ari_coarse4": 0.6863,
+      "nmi_coarse4": 0.6987,
+      "silhouette": 0.3768,
+      "ari_fine24": 0.2134,
+      "nmi_fine24": 0.4756
+    },
+    {
       "representation": "gnn-both",
       "k": 4,
-      "ari_coarse4": 0.3777,
-      "nmi_coarse4": 0.4848,
-      "silhouette": 0.3465,
-      "ari_fine24": 0.13,
-      "nmi_fine24": 0.3581
+      "ari_coarse4": 0.6521,
+      "nmi_coarse4": 0.6683,
+      "silhouette": 0.3265,
+      "ari_fine24": 0.207,
+      "nmi_fine24": 0.4559
+    },
+    {
+      "representation": "gnn-direction",
+      "k": 4,
+      "ari_coarse4": 0.3031,
+      "nmi_coarse4": 0.4781,
+      "silhouette": 0.3512,
+      "ari_fine24": 0.138,
+      "nmi_fine24": 0.3955
     },
     {
       "representation": "gnn-position",
       "k": 4,
-      "ari_coarse4": 0.6193,
-      "nmi_coarse4": 0.6359,
-      "silhouette": 0.3171,
-      "ari_fine24": 0.2136,
-      "nmi_fine24": 0.4475
+      "ari_coarse4": 0.3267,
+      "nmi_coarse4": 0.4755,
+      "silhouette": 0.4025,
+      "ari_fine24": 0.1648,
+      "nmi_fine24": 0.4197
     },
     {
       "representation": "gnn-topology",
       "k": 4,
-      "ari_coarse4": 0.3036,
-      "nmi_coarse4": 0.3487,
-      "silhouette": 0.3049,
-      "ari_fine24": 0.1036,
-      "nmi_fine24": 0.2527
+      "ari_coarse4": 0.2644,
+      "nmi_coarse4": 0.3168,
+      "silhouette": 0.3068,
+      "ari_fine24": 0.0898,
+      "nmi_fine24": 0.2295
+    },
+    {
+      "representation": "gnn-topology+direction",
+      "k": 4,
+      "ari_coarse4": 0.3678,
+      "nmi_coarse4": 0.4929,
+      "silhouette": 0.3226,
+      "ari_fine24": 0.1273,
+      "nmi_fine24": 0.367
     },
     {
       "representation": "centrality (baseline)",
@@ -133,31 +247,58 @@
       "nmi_fine24": 0.0779
     },
     {
+      "representation": "gnn-all",
+      "k": 6,
+      "ari_coarse4": 0.4914,
+      "nmi_coarse4": 0.6246,
+      "silhouette": 0.3345,
+      "ari_fine24": 0.3225,
+      "nmi_fine24": 0.5443
+    },
+    {
       "representation": "gnn-both",
       "k": 6,
-      "ari_coarse4": 0.4503,
-      "nmi_coarse4": 0.57,
-      "silhouette": 0.2941,
-      "ari_fine24": 0.3218,
-      "nmi_fine24": 0.5207
+      "ari_coarse4": 0.466,
+      "nmi_coarse4": 0.5851,
+      "silhouette": 0.3131,
+      "ari_fine24": 0.2964,
+      "nmi_fine24": 0.511
+    },
+    {
+      "representation": "gnn-direction",
+      "k": 6,
+      "ari_coarse4": 0.2835,
+      "nmi_coarse4": 0.4282,
+      "silhouette": 0.3064,
+      "ari_fine24": 0.1967,
+      "nmi_fine24": 0.3966
     },
     {
       "representation": "gnn-position",
       "k": 6,
-      "ari_coarse4": 0.4328,
-      "nmi_coarse4": 0.542,
-      "silhouette": 0.3646,
-      "ari_fine24": 0.3047,
-      "nmi_fine24": 0.5048
+      "ari_coarse4": 0.4268,
+      "nmi_coarse4": 0.5426,
+      "silhouette": 0.3717,
+      "ari_fine24": 0.2849,
+      "nmi_fine24": 0.4954
     },
     {
       "representation": "gnn-topology",
       "k": 6,
-      "ari_coarse4": 0.3176,
-      "nmi_coarse4": 0.3529,
-      "silhouette": 0.2651,
-      "ari_fine24": 0.1178,
-      "nmi_fine24": 0.269
+      "ari_coarse4": 0.2995,
+      "nmi_coarse4": 0.3449,
+      "silhouette": 0.2824,
+      "ari_fine24": 0.1204,
+      "nmi_fine24": 0.268
+    },
+    {
+      "representation": "gnn-topology+direction",
+      "k": 6,
+      "ari_coarse4": 0.2962,
+      "nmi_coarse4": 0.4256,
+      "silhouette": 0.2614,
+      "ari_fine24": 0.1628,
+      "nmi_fine24": 0.3561
     },
     {
       "representation": "centrality (baseline)",
@@ -169,31 +310,58 @@
       "nmi_fine24": 0.0816
     },
     {
+      "representation": "gnn-all",
+      "k": 8,
+      "ari_coarse4": 0.3898,
+      "nmi_coarse4": 0.5642,
+      "silhouette": 0.2717,
+      "ari_fine24": 0.3454,
+      "nmi_fine24": 0.513
+    },
+    {
       "representation": "gnn-both",
       "k": 8,
-      "ari_coarse4": 0.3718,
-      "nmi_coarse4": 0.5259,
-      "silhouette": 0.2697,
-      "ari_fine24": 0.3504,
-      "nmi_fine24": 0.4987
+      "ari_coarse4": 0.3917,
+      "nmi_coarse4": 0.5473,
+      "silhouette": 0.3041,
+      "ari_fine24": 0.3652,
+      "nmi_fine24": 0.5484
+    },
+    {
+      "representation": "gnn-direction",
+      "k": 8,
+      "ari_coarse4": 0.2424,
+      "nmi_coarse4": 0.4104,
+      "silhouette": 0.2644,
+      "ari_fine24": 0.1858,
+      "nmi_fine24": 0.3975
     },
     {
       "representation": "gnn-position",
       "k": 8,
-      "ari_coarse4": 0.3701,
-      "nmi_coarse4": 0.5124,
-      "silhouette": 0.3601,
-      "ari_fine24": 0.3534,
-      "nmi_fine24": 0.527
+      "ari_coarse4": 0.3582,
+      "nmi_coarse4": 0.5154,
+      "silhouette": 0.3735,
+      "ari_fine24": 0.3443,
+      "nmi_fine24": 0.563
     },
     {
       "representation": "gnn-topology",
       "k": 8,
-      "ari_coarse4": 0.2928,
-      "nmi_coarse4": 0.3383,
-      "silhouette": 0.2198,
-      "ari_fine24": 0.127,
-      "nmi_fine24": 0.2668
+      "ari_coarse4": 0.2465,
+      "nmi_coarse4": 0.3261,
+      "silhouette": 0.2686,
+      "ari_fine24": 0.1132,
+      "nmi_fine24": 0.2717
+    },
+    {
+      "representation": "gnn-topology+direction",
+      "k": 8,
+      "ari_coarse4": 0.2521,
+      "nmi_coarse4": 0.4276,
+      "silhouette": 0.1961,
+      "ari_fine24": 0.2427,
+      "nmi_fine24": 0.4076
     },
     {
       "representation": "centrality (baseline)",
@@ -205,31 +373,58 @@
       "nmi_fine24": 0.0881
     },
     {
+      "representation": "gnn-all",
+      "k": 10,
+      "ari_coarse4": 0.3691,
+      "nmi_coarse4": 0.5399,
+      "silhouette": 0.2387,
+      "ari_fine24": 0.3288,
+      "nmi_fine24": 0.505
+    },
+    {
       "representation": "gnn-both",
       "k": 10,
-      "ari_coarse4": 0.3173,
-      "nmi_coarse4": 0.4967,
-      "silhouette": 0.2797,
-      "ari_fine24": 0.4063,
-      "nmi_fine24": 0.5291
+      "ari_coarse4": 0.3265,
+      "nmi_coarse4": 0.5031,
+      "silhouette": 0.3004,
+      "ari_fine24": 0.3862,
+      "nmi_fine24": 0.5165
+    },
+    {
+      "representation": "gnn-direction",
+      "k": 10,
+      "ari_coarse4": 0.2143,
+      "nmi_coarse4": 0.3944,
+      "silhouette": 0.2547,
+      "ari_fine24": 0.1886,
+      "nmi_fine24": 0.3955
     },
     {
       "representation": "gnn-position",
       "k": 10,
-      "ari_coarse4": 0.3139,
-      "nmi_coarse4": 0.4868,
-      "silhouette": 0.3502,
-      "ari_fine24": 0.4113,
-      "nmi_fine24": 0.5495
+      "ari_coarse4": 0.3173,
+      "nmi_coarse4": 0.4876,
+      "silhouette": 0.343,
+      "ari_fine24": 0.4029,
+      "nmi_fine24": 0.5626
     },
     {
       "representation": "gnn-topology",
       "k": 10,
-      "ari_coarse4": 0.2894,
-      "nmi_coarse4": 0.3368,
-      "silhouette": 0.2077,
-      "ari_fine24": 0.1382,
-      "nmi_fine24": 0.2735
+      "ari_coarse4": 0.2274,
+      "nmi_coarse4": 0.3172,
+      "silhouette": 0.2389,
+      "ari_fine24": 0.1235,
+      "nmi_fine24": 0.2692
+    },
+    {
+      "representation": "gnn-topology+direction",
+      "k": 10,
+      "ari_coarse4": 0.2224,
+      "nmi_coarse4": 0.4002,
+      "silhouette": 0.1972,
+      "ari_fine24": 0.236,
+      "nmi_fine24": 0.3829
     },
     {
       "representation": "centrality (baseline)",
@@ -241,31 +436,58 @@
       "nmi_fine24": 0.1081
     },
     {
+      "representation": "gnn-all",
+      "k": 12,
+      "ari_coarse4": 0.2803,
+      "nmi_coarse4": 0.5135,
+      "silhouette": 0.2158,
+      "ari_fine24": 0.2932,
+      "nmi_fine24": 0.5048
+    },
+    {
       "representation": "gnn-both",
       "k": 12,
-      "ari_coarse4": 0.2962,
-      "nmi_coarse4": 0.48,
-      "silhouette": 0.2699,
-      "ari_fine24": 0.4279,
-      "nmi_fine24": 0.5232
+      "ari_coarse4": 0.2924,
+      "nmi_coarse4": 0.4823,
+      "silhouette": 0.2798,
+      "ari_fine24": 0.3772,
+      "nmi_fine24": 0.5068
+    },
+    {
+      "representation": "gnn-direction",
+      "k": 12,
+      "ari_coarse4": 0.1916,
+      "nmi_coarse4": 0.3806,
+      "silhouette": 0.2335,
+      "ari_fine24": 0.1922,
+      "nmi_fine24": 0.3882
     },
     {
       "representation": "gnn-position",
       "k": 12,
-      "ari_coarse4": 0.29,
-      "nmi_coarse4": 0.4663,
-      "silhouette": 0.341,
-      "ari_fine24": 0.4368,
-      "nmi_fine24": 0.5371
+      "ari_coarse4": 0.2593,
+      "nmi_coarse4": 0.4596,
+      "silhouette": 0.3025,
+      "ari_fine24": 0.4411,
+      "nmi_fine24": 0.5433
     },
     {
       "representation": "gnn-topology",
       "k": 12,
-      "ari_coarse4": 0.195,
-      "nmi_coarse4": 0.3161,
-      "silhouette": 0.173,
-      "ari_fine24": 0.1501,
-      "nmi_fine24": 0.2775
+      "ari_coarse4": 0.2293,
+      "nmi_coarse4": 0.3222,
+      "silhouette": 0.2258,
+      "ari_fine24": 0.1375,
+      "nmi_fine24": 0.2792
+    },
+    {
+      "representation": "gnn-topology+direction",
+      "k": 12,
+      "ari_coarse4": 0.218,
+      "nmi_coarse4": 0.4133,
+      "silhouette": 0.1985,
+      "ari_fine24": 0.2635,
+      "nmi_fine24": 0.4077
     }
   ],
   "within_player_consistency": [
@@ -279,23 +501,44 @@
     {
       "representation": "gnn-position",
       "n_players": 400,
-      "same_player_cosine": 0.6826,
-      "diff_player_cosine": 0.0211,
-      "lift": 0.6615
+      "same_player_cosine": 0.6976,
+      "diff_player_cosine": 0.0331,
+      "lift": 0.6646
     },
     {
       "representation": "gnn-topology",
       "n_players": 400,
-      "same_player_cosine": 0.4849,
-      "diff_player_cosine": 0.0219,
-      "lift": 0.463
+      "same_player_cosine": 0.4777,
+      "diff_player_cosine": 0.0267,
+      "lift": 0.451
     },
     {
       "representation": "gnn-both",
       "n_players": 400,
-      "same_player_cosine": 0.6863,
-      "diff_player_cosine": 0.0199,
-      "lift": 0.6664
+      "same_player_cosine": 0.7058,
+      "diff_player_cosine": 0.0281,
+      "lift": 0.6776
+    },
+    {
+      "representation": "gnn-direction",
+      "n_players": 400,
+      "same_player_cosine": 0.6503,
+      "diff_player_cosine": 0.059,
+      "lift": 0.5913
+    },
+    {
+      "representation": "gnn-topology+direction",
+      "n_players": 400,
+      "same_player_cosine": 0.607,
+      "diff_player_cosine": 0.0277,
+      "lift": 0.5793
+    },
+    {
+      "representation": "gnn-all",
+      "n_players": 400,
+      "same_player_cosine": 0.7561,
+      "diff_player_cosine": 0.0381,
+      "lift": 0.718
     }
   ],
   "stability_kind": "half_season",
@@ -310,45 +553,87 @@
     {
       "representation": "gnn-position",
       "n_players": 383,
-      "matched_cosine": 0.8899,
-      "shuffled_cosine": 0.0708,
-      "lift": 0.8191
+      "matched_cosine": 0.8976,
+      "shuffled_cosine": 0.0798,
+      "lift": 0.8178
     },
     {
       "representation": "gnn-topology",
       "n_players": 383,
-      "matched_cosine": 0.8087,
-      "shuffled_cosine": 0.062,
-      "lift": 0.7466
+      "matched_cosine": 0.7961,
+      "shuffled_cosine": 0.0523,
+      "lift": 0.7437
     },
     {
       "representation": "gnn-both",
       "n_players": 383,
-      "matched_cosine": 0.8992,
-      "shuffled_cosine": 0.0556,
-      "lift": 0.8436
+      "matched_cosine": 0.9013,
+      "shuffled_cosine": 0.0703,
+      "lift": 0.831
+    },
+    {
+      "representation": "gnn-direction",
+      "n_players": 383,
+      "matched_cosine": 0.8776,
+      "shuffled_cosine": 0.1543,
+      "lift": 0.7234
+    },
+    {
+      "representation": "gnn-topology+direction",
+      "n_players": 383,
+      "matched_cosine": 0.8488,
+      "shuffled_cosine": 0.0885,
+      "lift": 0.7602
+    },
+    {
+      "representation": "gnn-all",
+      "n_players": 383,
+      "matched_cosine": 0.9189,
+      "shuffled_cosine": 0.092,
+      "lift": 0.8268
     }
   ],
   "resources": [
     {
       "name": "gnn-position",
-      "seconds": 117.49,
-      "peak_rss_mb": 734.1,
-      "gpu_peak_mb": 1.5,
+      "seconds": 5.66,
+      "peak_rss_mb": 581.2,
+      "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-topology",
-      "seconds": 111.41,
-      "peak_rss_mb": 778.0,
-      "gpu_peak_mb": 7.6,
+      "seconds": 6.57,
+      "peak_rss_mb": 601.5,
+      "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-both",
-      "seconds": 131.26,
-      "peak_rss_mb": 738.0,
-      "gpu_peak_mb": 12.4,
+      "seconds": 5.44,
+      "peak_rss_mb": 614.1,
+      "gpu_peak_mb": 0.0,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "gnn-direction",
+      "seconds": 4.22,
+      "peak_rss_mb": 625.5,
+      "gpu_peak_mb": 0.0,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "gnn-topology+direction",
+      "seconds": 7.03,
+      "peak_rss_mb": 631.5,
+      "gpu_peak_mb": 0.0,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "gnn-all",
+      "seconds": 3.83,
+      "peak_rss_mb": 639.8,
+      "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     }
   ]

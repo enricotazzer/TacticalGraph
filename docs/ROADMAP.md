@@ -20,7 +20,7 @@ re-litigated later. Data availability is documented separately in
 Result prediction and tactical pattern discovery are built on both corpora; see the README.
 Findings worth carrying forward:
 
-- **Module 3's negative result was mostly an optimiser bug. Two things were fixed; two remain.**
+- **Module 3's negative result was four bugs, not a finding.** Each fix changed the conclusion; the current one is at the end of this entry.
 
   The published claim was "the GNN+Transformer is significantly worse than B0 in all 9 runs
   because 300 independent training matches cannot support a sequence model". Both halves were
@@ -118,10 +118,13 @@ Findings worth carrying forward:
   Also measured: **pooling corpora is safe and mildly helpful** (B0 −0.005 to −0.011, B1 −0.017
   on the Premier League fold, B2 −0.17 to −0.23), so cross-provider training needs no domain
   adaptation to be worth doing.
-- **Module 2's topology contribution is near zero and shrinks on the cleaner corpus**
-  (+0.73 pp on the Premier League, 3-seed mean, spanning +0.25 to +1.06 across seeds, vs
-  ~1.1–1.5 pp on Serie A). Position features carry the
-  signal; graph topology adds almost nothing for role identification.
+- **Module 2: passing *volume* adds almost nothing over position, passing *direction* adds a lot.**
+  The ten `TOPOLOGY_FEATURES` are all volume measures and buy +1.00 pp (Premier League) to +1.07 pp
+  (Serie A within-season) over pitch position, inside their own seed spread. Adding the four
+  `DIRECTION_FEATURES` takes it to **+2.65 pp / +2.53 pp**, five to ten times the seed spread —
+  the first non-trivial contribution from graph structure in this project. The original conclusion
+  ("graph topology adds almost nothing for role identification") was true of the features that
+  existed, not of graphs.
 - **Module 4's set-piece rule still over-segments.** Chains restart on every set piece, which
   splits one phase of play into fragments. A possession that restarts on a throw-in is often
   the same attack.
@@ -131,17 +134,44 @@ Findings worth carrying forward:
 Raised during review and not yet built. These are real limitations, not speculation — the
 measurements behind them are in [DATA_SOURCES.md](DATA_SOURCES.md).
 
-1. **Pass-only edges make centrality a volume proxy.** Midfielders take 84% of the top 50 by
-   degree against a 33% population share; forwards and goalkeepers are unrankable. Candidate
-   fixes, in order of expected value:
-   - **xT-weighted edges** — replace `weight = pass count` with `weight = Σ xT delta`, so a
-     line-breaking pass outweighs a square ball. Machinery already exists in `features/chains`.
-   - **Shot-chain involvement** — participation rate in possessions that end in a shot, via
-     `possession_id`. The one metric that would rank forwards at all.
-   - **Role-relative reporting** — z-score centrality within coarse role, so "central for a
-     centre-back" is expressible.
-   - **Pass progressiveness** as node features: `mean_dx` and `mean_length` are already on the
-     edge table and unused.
+1. **Pass-only edges make centrality a volume proxy — partly addressed.** Midfielders take 84% of
+   the top 50 by degree against a 31-33% population share; goalkeepers take 0% on all ten metrics.
+   The limitation replicates on the single-provider Premier League corpus, so it is not a
+   harmonisation artefact.
+   - **Pass progressiveness — BUILT, and it is the biggest win here.** `DIRECTION_FEATURES` in
+     `models/role_gnn.py` derives progression made/received, mean length and progressive share
+     from `mean_dx`/`mean_length`, which had been on the edge table since Module 1 and unused.
+     Module 2's contribution over pitch position goes from +1.00 pp (`both`) to **+2.65 pp**
+     (`all`) on the Premier League, +2.53 pp on the within-season control and +5.74 pp on the
+     confounded split — five to ten times the seed spread, where the old volume-only gap sat
+     inside it. Direction separates what volume cannot: forwards *receive* +13.7 m passes, keepers
+     *send* +30.3 m ones, and both can share a degree with anyone.
+     **They do not transfer to Module 3.** The same four features on the window graphs give
+     0.8213 ± 0.1078 against the volume arm's 0.7795 ± 0.0022 — but per seed it is 0.9457 / 0.7565
+     / 0.7617, i.e. the two *best* individual runs in the project plus one collapse that drags the
+     mean. Module 2 averages these over a whole match (~40 passes per player); Module 3 averages
+     them per 15-minute window (~5-10 passes), where the same statistic is mostly noise. `volume`
+     stays the Module 3 default; `--node-features volume+direction` runs the other arm. Whether
+     the instability is fixable (more regularisation for 16 features, lower LR, or shrinking each
+     window's estimate toward the match mean) is untested and is the obvious next experiment.
+     Caveats: `topology+direction` without position is worse than position alone on every split,
+     so it complements location rather than replacing it; and three of the four are in metres
+     rather than shares, so they carry provider annotation differences that the share-based
+     features do not.
+   - **Role-relative reporting — BUILT.** `role_relative_metrics` in `features/centrality.py`
+     z-scores within coarse role. Top-50 composition moves from 84% MID to 32% against a 31%
+     population share and a goalkeeper becomes rankable. Note this is **largely true by
+     construction** — z-scoring within role forces the composition toward the population — so it
+     makes "central for a centre-back" expressible rather than proving the metric measures
+     tactical importance.
+   - **xT-weighted edges** — still open. `weight = Σ xT delta` instead of pass count. The shared
+     fit now lives in `features/xthreat.py` (`fit_xthreat`, train-fold only), but the persisted
+     edge tables carry no per-edge xT, so this needs either re-deriving edges from actions at
+     module time or a split-dependent artifact. Measure the cost before committing.
+   - **Shot-chain involvement** — still open. Participation rate in possessions ending in a shot,
+     via `possession_id`. The one metric that would rank forwards on *outcome* rather than on
+     receiving direction. `features/xthreat.player_threat` is the template for how to compute a
+     per-player share post-split.
 2. **Verticality as a team style feature.** Validated but not yet a model input: mean pass
    verticality ranks Serie A teams sensibly (Napoli and Juventus most patient in both seasons;
    Sassuolo and Crotone most vertical) and survives the provider change at Spearman ρ = 0.509

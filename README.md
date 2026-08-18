@@ -44,7 +44,7 @@ positive ones:
 
 | Module | Finding |
 |---|---|
-| 2 | The GNN embedding beats classical centrality **~10×** on role alignment — but passing topology adds only **+0.73 pp** (Premier League) to **+1.07 pp** (Serie A control) over pitch position, and its clustering benefit is clear on Serie A yet indistinguishable from noise on the Premier League. Most recoverable signal is spatial. |
+| 2 | The GNN embedding beats classical centrality **~10×** on role alignment. Passing *volume* adds only **+1.00 pp** (Premier League) to +1.07 pp (Serie A control) over pitch position — but adding pass **direction** takes that to **+2.65 pp / +2.53 pp**, the first non-trivial contribution from graph structure in this project. Volume is a positional proxy; direction is not. |
 | 3 | The graph model starts *as* a frozen B1 and learns a correction to it. It is **indistinguishable from B1 on both unconfounded splits with the point estimate in its favour** (Δ −0.0119 and −0.0042, 0/3 significant) and is the best model on the primary corpus (0.7795 vs B1's 0.7913) — but significantly worse than B1 on the confounded split. Three earlier conclusions were withdrawn, each falsified by a bug in this repo rather than by data: batch size was 1, capacity looked unsupportable because of it, and **7 of 10 graph node features were full-match values leaking the future**. |
 | 4 | Clustering finds possession patterns reaching a **57.3% shot rate against a 12.37% base** (4.6× above; 81.3% on the within-season control) — and the interpretable baseline beats the learned encoder at every k. |
 
@@ -277,13 +277,55 @@ Test accuracy, 3 seeds, mean ± std:
 
 | Corpus / split | `position` | `topology` | `both` | `both − position` |
 |---|---|---|---|---|
-| **Premier League, matchweek (primary)** | 0.8531 ± 0.0029 | 0.7578 ± 0.0071 | **0.8604 ± 0.0014** | **+0.73 pp ± 0.43** |
-| Serie A, within-season (control) | 0.8915 ± 0.0062 | 0.7659 ± 0.0045 | **0.9022 ± 0.0007** | **+1.07 pp ± 0.57** |
-| Serie A, cross-season (confounded) | 0.7769 ± 0.0102 | 0.6777 ± 0.0095 | **0.7916 ± 0.0026** | **+1.47 pp ± 0.98** |
+| **Premier League, matchweek (primary)** | 0.8498 ± 0.0017 | 0.7538 ± 0.0086 | **0.8598 ± 0.0054** | **+1.00 pp** |
+| Serie A, within-season (control) | 0.8915 ± 0.0062 | 0.7659 ± 0.0045 | **0.9022 ± 0.0007** | **+1.07 pp** |
+| Serie A, cross-season (confounded) | 0.7769 ± 0.0102 | 0.6777 ± 0.0095 | **0.7916 ± 0.0026** | **+1.47 pp** |
 
 The headline +1.47 pp is the *confounded* split. Compare the two unconfounded rows instead:
-**+0.73 pp** (Premier League) and **+1.07 pp** (Serie A within-season). Part of the apparent
+**+1.00 pp** (Premier League) and **+1.07 pp** (Serie A within-season). Part of the apparent
 cross-season contribution was the provider change, not passing structure.
+
+### Pass direction more than doubles the graph's contribution
+
+Every one of those ten `topology` features is a **volume** measure — touches, passes, degree,
+strength, edge share. That is why the graph adds so little over pitch position, and why centrality
+built on them is a positional proxy (midfielders are 31% of Premier League players with ≥10
+matches and **84% of the top 50 by degree**; goalkeepers take 0% on all ten metrics).
+
+Four features computed from `mean_dx` and `mean_length` — which had been sitting unused on the
+edge table since Module 1 — measure *what kind* of pass instead: progression made, progression
+received, mean length, and share of progressive passes. Adding them:
+
+| Corpus / split | `position` | `both` | `all` (+ direction) | `all − position` |
+|---|---|---|---|---|
+| **Premier League, matchweek (primary)** | 0.8498 | 0.8598 | **0.8763 ± 0.0026** | **+2.65 pp** |
+| Serie A, within-season (control) | 0.8915 | 0.9022 | **0.9169 ± 0.0055** | **+2.53 pp** |
+| Serie A, cross-season (confounded) | 0.7769 | 0.7916 | **0.8343 ± 0.0034** | **+5.74 pp** |
+
+**This is the first time in the project that graph structure adds a non-trivial amount over
+position**, and unlike the ~1 pp `both − position` gap — which sits inside its own seed spread —
+these gaps are five to ten times the seed standard deviation. Direction contributes more on its own
+(+1.65 pp on the Premier League, on top of `both`) than the entire volume-based feature set does.
+
+Why it works is visible in the raw means, and it is ordinary football:
+
+| role | progression *made* | progression *received* | length made |
+|---|---|---|---|
+| GK | **+30.3 m** | −19.5 m | 36.4 m |
+| DEF | +3.8 m | −1.1 m | 17.1 m |
+| MID | +1.7 m | +3.6 m | 15.7 m |
+| FWD | −1.2 m | **+13.7 m** | 13.3 m |
+
+Forwards are the *receivers* of vertical passes and keepers the senders. A target man and a deep
+recycler can have identical degree, and volume features cannot tell them apart at all.
+
+Three caveats kept deliberately in view. The **largest gain is on the confounded split** (+5.74 pp),
+so it earns the same suspicion every cross-season number here does — though the two unconfounded
+splits agree at +2.65 and +2.53 pp, so the finding does not rest on it. **`topology+direction`
+without position is worse than position alone** on every split, so direction complements pitch
+location rather than replacing it. And three of the four features are in **metres**, not shares, so
+unlike the rest of the feature table they carry any provider difference in how pass end points are
+annotated; `progressive_share` is the provider-robust member of the group.
 
 ### Clustering: the actual comparison against the baseline
 
@@ -628,12 +670,34 @@ unconfounded splits, best-epoch is consistent (3–6 on the Premier League), and
 any rung. A stable model that ties the best baseline is a result you can build on; the three
 previous versions were measurements of bugs.
 
-Still worth trying, in order: **richer node features** — every one of the ten current topology
-features is a volume measure, so the graph may encode little beyond position (xT-weighted edges,
-pass progressiveness and shot-chain involvement are specified in `docs/ROADMAP.md`, and the
-progressiveness half needs no rebuild since `mean_dx` is already persisted); and **a larger unit of
-analysis**, since the ceiling estimate leaves only ~0.037 log-loss of headroom under B0 at this
-corpus size.
+**Richer node features were tried here too, and they do *not* transfer from Module 2.** Adding the
+same four direction features to the window graphs (`--node-features volume+direction`, 3 seeds on
+the Premier League):
+
+| arm | log-loss | ± std | Δ vs B1 | sig | per-seed |
+|---|---|---|---|---|---|
+| `volume` (canonical) | **0.7795** | 0.0022 | −0.0119 | 0/3 | 0.7799 / 0.7771 / 0.7814 |
+| `volume+direction` | 0.8213 | 0.1078 | +0.0300 | 1/3 | **0.9457** / 0.7565 / 0.7617 |
+
+Read the per-seed column, not the mean. Two of the three direction runs are the **best individual
+results anywhere in this project** (0.7565 and 0.7617, better than every volume run and than B1's
+0.7913). The third collapsed to 0.9457, worse than B1 by 0.15, and it alone drags the mean above
+the volume arm while inflating the seed spread 49×.
+
+The likely mechanism is sample size per feature, and it is the difference between the two modules:
+Module 2 computes these features over a **whole match** (~40 passes per player), where a
+weighted mean `dx` is stable; Module 3 computes them per **15-minute window**, where a player
+touches the ball perhaps 5–10 times and the same statistic is mostly noise. Averaging a direction
+over a handful of passes is a different measurement from averaging it over forty.
+
+`volume` therefore stays the default. Whether the instability is fixable — more regularisation for
+16 features instead of 12, a lower learning rate, or shrinking each window's direction estimate
+towards the match mean — is untested, and with three seeds it cannot be distinguished from
+intrinsic. That is the next thing to try, not a settled negative.
+
+Also still worth trying: **xT-weighted edges and shot-chain involvement**, the two graph-enrichment
+items still open in `docs/ROADMAP.md`; and **a larger unit of analysis**, since the ceiling estimate
+leaves only ~0.037 log-loss of headroom under B0 at this corpus size.
 
 **Two label caveats, reported not hidden.** The derived running scoreline reproduces the
 recorded final score for **758/760 games (99.7%)**; the two failures are Wyscout matches where

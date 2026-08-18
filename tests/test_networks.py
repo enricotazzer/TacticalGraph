@@ -333,3 +333,106 @@ def test_fit_xthreat_rejects_an_empty_training_fold():
         fit_xthreat(actions, set())
     with pytest.raises(ValueError, match="split was assigned"):
         fit_xthreat(actions, {999})
+
+
+# --------------------------------------------------------------------------------------
+# Direction features
+#
+# These exist because every TOPOLOGY_FEATURE is a volume measure, and volume is positional:
+# midfielders take 84% of the top 50 by degree against a 31% population share. A target man and
+# a deep recycler can share a degree while differing entirely in the *kind* of pass they touch.
+# --------------------------------------------------------------------------------------
+
+
+def _direction_fixture() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Keeper hits long forward passes; a forward receives them and lays the ball back."""
+    keys = {"game_id": 1, "team_id": 1, "season": "2015-2016", "provider": "statsbomb"}
+    nodes = pd.DataFrame([
+        {**keys, "player_id": pid, "mean_x": x, "mean_y": 34.0, "spread_x": 1.0,
+         "spread_y": 1.0, "touches": 10, "actions_all_types": 10,
+         "passes_attempted": 10, "passes_completed": 8}
+        for pid, x in ((1, 5.0), (2, 50.0), (3, 90.0))
+    ])
+    edges = pd.DataFrame([
+        # keeper -> midfielder: long and very forward
+        {**keys, "source": 1, "target": 2, "weight": 10, "mean_length": 40.0, "mean_dx": 35.0},
+        # midfielder -> forward: forward, shorter
+        {**keys, "source": 2, "target": 3, "weight": 10, "mean_length": 20.0, "mean_dx": 15.0},
+        # forward -> midfielder: backward lay-off
+        {**keys, "source": 3, "target": 2, "weight": 10, "mean_length": 10.0, "mean_dx": -12.0},
+    ])
+    return nodes, edges
+
+
+def test_direction_features_separate_senders_from_receivers():
+    from tacticalgraph.models.role_gnn import engineer_node_features
+
+    nodes, edges = _direction_fixture()
+    out = engineer_node_features(nodes, edges).set_index("player_id")
+
+    # The keeper makes the most progressive passes; the forward makes the least (negative).
+    assert out.loc[1, "progression_made"] == pytest.approx(35.0)
+    assert out.loc[3, "progression_made"] == pytest.approx(-12.0)
+    # The forward *receives* the most forward ball -- invisible to any volume metric, since all
+    # three players have identical degree and weight here.
+    assert out.loc[3, "progression_received"] == pytest.approx(15.0)
+    assert out.loc[1, "progression_received"] == pytest.approx(0.0), "keeper receives nothing"
+    # Degree is identical for players 1 and 3, so volume genuinely cannot tell them apart.
+    assert out.loc[1, "degree_out_norm"] == out.loc[3, "degree_out_norm"]
+
+
+def test_progressive_share_is_a_share_and_pass_length_is_weighted():
+    from tacticalgraph.models.role_gnn import engineer_node_features
+
+    nodes, edges = _direction_fixture()
+    out = engineer_node_features(nodes, edges).set_index("player_id")
+
+    assert out["progressive_share"].between(0.0, 1.0).all()
+    assert out.loc[1, "progressive_share"] == pytest.approx(1.0), "35 m is progressive"
+    assert out.loc[3, "progressive_share"] == pytest.approx(0.0), "-12 m is not"
+    assert out.loc[1, "pass_length_made"] == pytest.approx(40.0)
+
+
+def test_weighted_means_respect_edge_weight():
+    """A weighted mean, not a mean of means -- one heavy edge must dominate a light one."""
+    from tacticalgraph.models.role_gnn import engineer_node_features
+
+    keys = {"game_id": 1, "team_id": 1, "season": "2015-2016", "provider": "statsbomb"}
+    nodes = pd.DataFrame([
+        {**keys, "player_id": pid, "mean_x": 50.0, "mean_y": 34.0, "spread_x": 1.0,
+         "spread_y": 1.0, "touches": 1, "actions_all_types": 1,
+         "passes_attempted": 1, "passes_completed": 1}
+        for pid in (1, 2, 3)
+    ])
+    edges = pd.DataFrame([
+        {**keys, "source": 1, "target": 2, "weight": 9, "mean_length": 10.0, "mean_dx": 10.0},
+        {**keys, "source": 1, "target": 3, "weight": 1, "mean_length": 10.0, "mean_dx": 0.0},
+    ])
+    out = engineer_node_features(nodes, edges).set_index("player_id")
+    assert out.loc[1, "progression_made"] == pytest.approx(9.0)  # not 5.0
+
+
+def test_players_without_edges_get_zero_not_nan():
+    """Zero reads as 'no evidence of direction'; a NaN would poison the scaler."""
+    import numpy as np
+
+    from tacticalgraph.models.role_gnn import DIRECTION_FEATURES, engineer_node_features
+
+    nodes, edges = _direction_fixture()
+    isolated = nodes.iloc[[0]].copy()
+    isolated["player_id"] = 99
+    nodes = pd.concat([nodes, isolated], ignore_index=True)
+
+    out = engineer_node_features(nodes, edges).set_index("player_id")
+    assert not out[list(DIRECTION_FEATURES)].isna().any().any()
+    assert np.allclose(out.loc[99, list(DIRECTION_FEATURES)].to_numpy(dtype=float), 0.0)
+
+
+def test_empty_edge_table_still_returns_direction_columns():
+    from tacticalgraph.models.role_gnn import DIRECTION_FEATURES, engineer_node_features
+
+    nodes, edges = _direction_fixture()
+    out = engineer_node_features(nodes, edges.iloc[0:0])
+    for column in DIRECTION_FEATURES:
+        assert column in out.columns
+        assert (out[column] == 0.0).all()

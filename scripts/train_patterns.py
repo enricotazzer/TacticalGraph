@@ -23,7 +23,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
 import torch  # noqa: E402
 
 from tacticalgraph.config import ALL_SPLIT_KINDS, CORPORA, DEFAULT_CORPUS, Paths  # noqa: E402
@@ -43,21 +42,13 @@ from tacticalgraph.features.chains import (  # noqa: E402
     chain_sequences,
     cluster_profiles,
 )
+from tacticalgraph.features.xthreat import fit_xthreat  # noqa: E402
 from tacticalgraph.models.chain_encoder import (  # noqa: E402
     encode_all,
     train_chain_encoder,
 )
 
 log = logging.getLogger("train_patterns")
-
-
-def fit_xthreat(actions: pd.DataFrame, train_game_ids: set[int]) -> pd.Series:
-    """xThreat fitted on training games only, so chain xT gain carries no test-season info."""
-    from socceraction.xthreat import ExpectedThreat
-
-    model = ExpectedThreat(l=16, w=12)
-    model.fit(actions[actions["game_id"].isin(train_game_ids)])
-    return pd.Series(model.rate(actions), index=actions.index)
 
 
 def main() -> int:
