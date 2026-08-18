@@ -45,7 +45,7 @@ positive ones:
 | Module | Finding |
 |---|---|
 | 2 | The GNN embedding beats classical centrality **~10×** on role alignment — but passing topology adds only **+0.73 pp** (Premier League) to **+1.07 pp** (Serie A control) over pitch position, and its clustering benefit is clear on Serie A yet indistinguishable from noise on the Premier League. Most recoverable signal is spatial. |
-| 3 | **B1 (scoreline + aggregates + xT) is the best model** on every split. The graph model now starts *as* a frozen B1 and learns a correction — and still cannot improve on it (Δ vs B1 +0.028 / +0.006 / +0.180, negative on none), which makes the negative result settled rather than open. Two earlier diagnoses were withdrawn along the way: the original failure was mostly an optimiser bug (`optimiser.step()` once per match), not data scarcity — B0 plateaus at ~280 matches with only ~0.037 log-loss of headroom. |
+| 3 | The graph model starts *as* a frozen B1 and learns a correction to it. It is **indistinguishable from B1 on both unconfounded splits with the point estimate in its favour** (Δ −0.0119 and −0.0042, 0/3 significant) and is the best model on the primary corpus (0.7795 vs B1's 0.7913) — but significantly worse than B1 on the confounded split. Three earlier conclusions were withdrawn, each falsified by a bug in this repo rather than by data: batch size was 1, capacity looked unsupportable because of it, and **7 of 10 graph node features were full-match values leaking the future**. |
 | 4 | Clustering finds possession patterns reaching a **57.3% shot rate against a 12.37% base** (4.6× above; 81.3% on the within-season control) — and the interpretable baseline beats the learned encoder at every k. |
 
 ---
@@ -416,33 +416,79 @@ the reference that tests whether the graph contributes anything.
 | B0 | scoreline + minutes left | 0.7969 | 0.7504 | **0.7125** |
 | **B1** | + shots, passes, xThreat | **0.7913** | **0.7075** | 0.7305 |
 | B2 | + rolling form, network (GBM) | 0.8014 | 0.7660 | 0.7181 |
-| GNN + Transformer | B1 + windowed graph sequences | 0.8191 ± 0.0680 | 0.7131 ± 0.0050 | 0.9100 ± 0.1471 |
+| **GNN + Transformer** | B1 + windowed graph sequences | **0.7795 ± 0.0022** | 0.7339 ± 0.0167 | 0.7262 ± 0.0033 |
 
 Paired bootstrap **resampled by match** (16 correlated rows per match; resampling rows would
 shrink every interval ~4× and manufacture significance):
 
 | Comparison | PL Δ | sig. | Serie A cross Δ | sig. | Serie A within Δ | sig. |
 |---|---|---|---|---|---|---|
-| **GNN vs B1** | **+0.0278** | 0/3 | **+0.0056** | 1/3 | **+0.1795** | 1/3 |
-| GNN vs B0 | +0.0222 | 0/3 | **−0.0373** | **3/3** | +0.1975 | 1/3 |
+| **GNN vs B1** | **−0.0119** | 0/3 | +0.0264 | **2/3** | **−0.0042** | 0/3 |
+| GNN vs B0 | −0.0174 | 0/3 | −0.0164 | 0/3 | +0.0137 | 0/3 |
 | B1 vs B0 | −0.0056 | 0/3 | **−0.0429** | 3/3 | +0.0180 | 0/3 |
 | B2 vs B0 | +0.0045 | 0/3 | +0.0156 | 0/3 | +0.0056 | 0/3 |
 
-- **Given B1 for free, the graph sequence still does not improve on it.** Δ vs B1 is positive on
-  all three splits (+0.028, +0.006, +0.180) and negative on none. This is the module's answer, and
-  it does not rest on the confounded split.
-- **The one genuine positive: on Serie A cross-season the graph model is significantly better than
-  B0 in 3 of 3 runs** (Δ −0.0373) and statistically tied with B1 (0.7131 vs 0.7075). It is the
-  first time a graph model in this project has significantly beaten a baseline. It is also the
-  *confounded* split, so it earns the same suspicion as B1's advantage there.
-- **The seed variance is the other half of the finding.** ±0.068 on the Premier League and ±0.147
-  on the within-season control, against ±0.005 on cross-season. Individual runs range from 0.7605
-  (better than B1) to 1.0793 (worse than the class prior, 1.0268). A model this unstable is not
-  usable even where its mean looks respectable.
-- **B1 remains the best model overall**, and it is the only rung whose advantage over B0 is ever
-  significant — again only on the confounded split. On both unconfounded splits the CI spans zero
-  (PL Δ −0.006; within-season Δ +0.018 with B0 ahead).
+- **On the primary corpus the graph model is now the best model outright** — 0.7795 against B1's
+  0.7913 — and it has the lowest calibration error of any rung (ECE 0.054). But Δ vs B1 is **0/3
+  significant** with a CI of [−0.069, +0.050], so the correct statement is *indistinguishable from
+  B1 with the point estimate in its favour*, not "better than B1".
+- **Δ vs B1 is negative on both unconfounded splits** (PL −0.0119, within-season −0.0042) and
+  significantly *positive* on the confounded one (+0.0264, 2/3). That is the inverse of B1's own
+  pattern, whose advantage over B0 is significant only on the confounded split. The graph model's
+  contribution shows up precisely where the provider confound is absent, which is the more
+  trustworthy of the two settings.
+- **These numbers replace a materially different set**, and the reason was a bug, not new data —
+  see the leak section below. The previous version of this table reported 0.8191 / 0.7131 / 0.9100
+  and concluded the graph model "cannot improve on B1 on any split". That conclusion is withdrawn.
+- **The seed variance collapsed**: ±0.068 → ±0.0022 on the Premier League and ±0.147 → ±0.0033 on
+  the within-season control. The instability previously reported as "part of the finding" was the
+  leak.
+- **B1 is still the best model on Serie A cross-season** and the only rung whose advantage over B0
+  is ever significant. On the within-season control B0 still wins outright (0.7125).
 - B2 is indistinguishable from B0 everywhere.
+
+### The node features leaked the future, and fixing it changed the result
+
+**Seven of the ten node features handed to the graph model were full-match values.**
+`engineer_node_features` aggregated the edge table on `(game_id, team_id, season, provider)` —
+without `window_index` — while Module 3 called it on the *windowed* tables. Every edge-derived
+feature was therefore the player's whole-match value repeated across all 16 windows: the token for
+minute 15 already carried passing structure from minute 90.
+
+| feature | before the fix |
+|---|---|
+| `degree_in_norm`, `degree_out_norm`, `strength_in_norm`, `strength_out_norm`, `edge_share_in`, `edge_share_out` | full-match, identical in all 16 windows |
+| `touches` | windowed numerator over a full-match denominator |
+| `passes_attempted`, `passes_completed`, `pass_completion_rate` | correctly windowed |
+
+Module 2 was unaffected — it uses the full-match networks, where match-level aggregation is
+correct — and so was B2, whose network features already filter to the closing window. The fix is a
+`group_keys` argument that `build_window_features` passes explicitly. It is explicit rather than
+inferred because the full-match tables *do* carry a `window_index` column that is entirely null,
+so any auto-detection would fail silently in one direction or the other.
+
+**The effect was the opposite of what I predicted.** Leakage is supposed to flatter a model, so
+removing it should have hurt:
+
+| | before (leaking) | after (windowed) |
+|---|---|---|
+| PL matchweek | 0.8191 ± 0.0680 | **0.7795 ± 0.0022** |
+| Serie A cross-season | 0.7131 ± 0.0050 | 0.7339 ± 0.0167 |
+| Serie A within-season | 0.9100 ± 0.1471 | **0.7262 ± 0.0033** |
+| Δ vs B1, unconfounded splits | +0.028, +0.180 | **−0.012, −0.004** |
+
+Two of three splits improved, the within-season control by 0.18, and seed variance fell by a
+factor of 31 to 45 on both unconfounded splits. The mechanism is that those six features were
+*constant along the sequence*: a Transformer given inputs that never vary with time gets no signal
+from them, only capacity spent and a fold-specific offset that did not transfer. They were not
+usable future information — they were noise with a leak's provenance.
+
+**Why it survived so long:** the existing causality test perturbs windows 12–15 of graphs *already
+handed to the model* and checks predictions 0–11 are unchanged. It passes either way, because the
+leak was upstream in feature construction. `tests/test_outcome_gnn.py` now has the truncation test
+that mirrors the state table's — build window *t*'s features from the whole match, rebuild from
+tables truncated at *t*, assert identical — and it is verified to **fail on the old behaviour**,
+naming all seven leaking columns, and pass on the new.
 
 ### Making B1 the floor: what it took to get an interpretable answer
 
@@ -561,25 +607,33 @@ over the scoreline. But on the **unconfounded within-season control, B0 wins** a
 indistinguishable from it — with 60 test matches the intervals overlap heavily, so B1's
 advantage may be specific to the cross-season setting rather than general.
 
-**The graph sequence model does not improve on B1, and that is now a settled result rather than an
-open one.** Getting there took four fixes and two withdrawn diagnoses. The final experiment hands
-the model B1 outright — frozen logits, zero-initialised head, an early-stopping path back to B1 —
-and it still cannot do better: Δ vs B1 is +0.028, +0.006 and +0.180 on the three splits, negative
-on none. When a model is given the baseline for free and cannot beat it, the shortfall is not
-optimisation, initialisation, or capacity.
+**The graph sequence model is indistinguishable from B1 on both unconfounded splits, with the point
+estimate in its favour on each — and it is the best model on the primary corpus.** That is the
+fourth version of this conclusion, and every revision was caused by a bug in this repository rather
+than by new data:
 
-Two qualifications keep this from being a flat dismissal. On Serie A cross-season the model **ties
-B1 and significantly beats B0 in 3 of 3 runs** — real, but on the confounded split. And its seed
-variance is large enough (±0.068 and ±0.147 on the two unconfounded splits, individual runs from
-0.7605 to 1.0793) that "does not improve on B1" is the mean behaviour of an unstable model, not a
-tight bound.
+| # | claim | what falsified it |
+|---|---|---|
+| 1 | "significantly worse than B0 in 9/9 runs; 300 labels cannot support a sequence model" | `optimiser.step()` ran once per match — batch size 1 |
+| 2 | "the corpus cannot support capacity" (sweep prefers the smallest model) | an artefact of batch size 1; capacity is near-neutral once fixed |
+| 3 | "cannot improve on B1 even when handed it for free; high seed variance is part of the finding" | 7 of 10 node features were full-match values |
 
-What would still be worth trying, in order: **richer node features** — the pass-only edges make
-even Module 2's centrality a volume proxy, so the graph the sequence model sees may simply not
-encode much beyond position (xT-weighted edges and shot-chain involvement are specified in
-`docs/ROADMAP.md`); and **a unit of analysis larger than 300 matches**, since the ceiling estimate
-puts only ~0.037 log-loss of headroom under B0 at this corpus size, which is a thin target for any
-architecture.
+What is left is deliberately modest. Δ vs B1 is **0/3 significant** on both splits where it is
+negative, with intervals of [−0.069, +0.050] and [−0.022, +0.016]. "Indistinguishable from B1, and
+now stable enough to say so" is the honest reading — not a win. On Serie A cross-season the graph
+model is still significantly *worse* than B1 in 2 of 3 runs.
+
+What is genuinely new is that the model is no longer *broken*: seed spread is ±0.002–0.003 on the
+unconfounded splits, best-epoch is consistent (3–6 on the Premier League), and ECE is the lowest of
+any rung. A stable model that ties the best baseline is a result you can build on; the three
+previous versions were measurements of bugs.
+
+Still worth trying, in order: **richer node features** — every one of the ten current topology
+features is a volume measure, so the graph may encode little beyond position (xT-weighted edges,
+pass progressiveness and shot-chain involvement are specified in `docs/ROADMAP.md`, and the
+progressiveness half needs no rebuild since `mean_dx` is already persisted); and **a larger unit of
+analysis**, since the ceiling estimate leaves only ~0.037 log-loss of headroom under B0 at this
+corpus size.
 
 **Two label caveats, reported not hidden.** The derived running scoreline reproduces the
 recorded final score for **758/760 games (99.7%)**; the two failures are Wyscout matches where

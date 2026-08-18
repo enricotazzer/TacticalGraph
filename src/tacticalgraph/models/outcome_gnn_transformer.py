@@ -45,7 +45,11 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.nn import SAGEConv, global_mean_pool
 
 from tacticalgraph.features.match_state import B1_FEATURES
-from tacticalgraph.models.role_gnn import TOPOLOGY_FEATURES, engineer_node_features
+from tacticalgraph.models.role_gnn import (
+    TOPOLOGY_FEATURES,
+    WINDOW_KEYS,
+    engineer_node_features,
+)
 
 log = logging.getLogger(__name__)
 
@@ -343,8 +347,13 @@ def build_window_features(
 
     Sharing `engineer_node_features` matters: two separate definitions of "what a node knows"
     would let Module 2's and Module 3's conclusions drift apart for reasons nobody could trace.
+
+    `WINDOW_KEYS` is the load-bearing argument. Without it the edge aggregates are computed over
+    the whole match and repeated across all 16 windows, so the token for minute 15 carries the
+    player's minute-90 passing structure. Every Module 3 number reported before this argument
+    existed was produced that way.
     """
-    return engineer_node_features(window_nodes, window_edges)
+    return engineer_node_features(window_nodes, window_edges, group_keys=WINDOW_KEYS)
 
 
 def make_sequences(

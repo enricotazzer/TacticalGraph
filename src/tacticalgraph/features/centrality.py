@@ -215,3 +215,40 @@ def aggregate_player_season(
     aggregated["n_matches"] = grouped.size()
     aggregated = aggregated.reset_index()
     return aggregated[aggregated["n_matches"] >= min_matches].reset_index(drop=True)
+
+
+def role_relative_metrics(
+    aggregated: pd.DataFrame,
+    role_column: str = "coarse_role",
+    metrics: tuple[str, ...] = PLAYER_METRICS,
+    suffix: str = "_z",
+) -> pd.DataFrame:
+    """Add within-role z-scores for each centrality metric.
+
+    Raw centrality is largely a positional artefact: on the Premier League corpus midfielders are
+    31% of players with >=10 matches but **84% of the top 50 by `degree_total`**, and goalkeepers
+    take 0% of the top 50 on all ten metrics. A leaderboard sorted on the raw value is therefore a
+    list of midfielders, and it cannot express "unusually central *for a centre-back*" at all.
+
+    Z-scoring within `coarse_role` makes that expressible and gives keepers and forwards a
+    meaningful ranking, at the cost of no longer comparing across roles -- which raw centrality
+    never did honestly anyway.
+
+    A role with fewer than two players, or zero variance in a metric, gets 0.0 rather than NaN or
+    an infinity: "no evidence this player is unusual for their role" is the correct reading, and a
+    NaN would silently drop them from any downstream sort.
+    """
+    if role_column not in aggregated.columns:
+        raise KeyError(
+            f"{role_column!r} absent; join the player directory's role labels before z-scoring"
+        )
+
+    frame = aggregated.copy()
+    present = [m for m in metrics if m in frame.columns]
+    for metric in present:
+        grouped = frame.groupby(role_column)[metric]
+        mean = grouped.transform("mean")
+        # Population std (ddof=0) so a two-player role still yields a finite spread.
+        std = grouped.transform(lambda s: s.std(ddof=0))
+        frame[f"{metric}{suffix}"] = ((frame[metric] - mean) / std.replace(0.0, np.nan)).fillna(0.0)
+    return frame

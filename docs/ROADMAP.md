@@ -47,18 +47,31 @@ Findings worth carrying forward:
   times, 5k three times, 77k twice. The 77k model went from consistently *worst* to competitive,
   so the old preference was measuring gradient noise, not the corpus.
 
-  **Both remaining fixes have since been built. Neither rescues the model, and the result is now
-  settled rather than open.**
+  **A fourth bug found after those fixes changed the answer again: the graph node features leaked
+  the future.** `engineer_node_features` aggregated edges without `window_index` while Module 3
+  called it on the windowed tables, so **7 of 10 node features were full-match values repeated
+  across all 16 windows**. Fixing it moved the graph model from "worse than B1 everywhere" to
+  **indistinguishable from B1 on both unconfounded splits with the point estimate in its favour**
+  (Δ −0.0119 on PL matchweek, −0.0042 within-season, 0/3 significant each), and made it the best
+  model on the primary corpus (0.7795 vs B1's 0.7913). Seed spread fell 31–45× (±0.068 → ±0.002).
+
+  The effect was the *opposite* of the prediction: leakage is meant to flatter a model. These six
+  features were constant along the sequence, so a Transformer got no signal from them — only spent
+  capacity and a fold-specific offset that did not transfer. Note the existing causality test could
+  never have caught it: it perturbs graphs already handed to the model, so it is blind to feature
+  construction. `tests/test_outcome_gnn.py` now carries a truncation test that provably fails on
+  the old behaviour.
+
+  **The two fixes below were built before that discovery. Neither rescued the model on its own.**
 
   1. **Residual on a fitted B1 — built, and it is the decisive experiment.** B1 is fitted (reusing
      `fit_ladder`'s existing per-fold predictions, so it is provably the same B1 the report
      compares against), frozen, and its clipped log-probabilities added to the output with a
      zero-initialised head. The model therefore *is* B1 at step 0 and learns only a correction.
-     Result: Δ vs B1 = **+0.0278 / +0.0056 / +0.1795** on PL matchweek / Serie A cross-season /
-     within-season — positive everywhere, negative nowhere. Handed the baseline for free, the
-     graph sequence cannot beat it. One real positive: on cross-season it ties B1 and is
-     significantly better than B0 in 3/3 runs, the first significant win for a graph model here —
-     but that is the confounded split.
+     It is the right experimental design and it is what makes Δ vs B1 interpretable, but on its own
+     (with the node features still leaking) it produced Δ vs B1 = +0.0278 / +0.0056 / +0.1795 and
+     the wrong conclusion. Post-leak-fix the same design gives **−0.0119 / +0.0264 / −0.0042**.
+     Keep the design; the numbers above it in this section are the ones to quote.
 
      A third fix fell out of building it: early stopping only ever scored the model *after* each
      epoch, so the initial state — the one equal to B1 — could never win, and "B1 is the floor" was
@@ -70,21 +83,37 @@ Findings worth carrying forward:
      selections, margins were 0.004–0.038 (noise), and the two runs where `b0_signal` won selection
      produced the *worst* two test scores of the nine. Kept as a validation-selected option;
      **not** an improvement.
-  3. **Still true:** the model overfits after its validation minimum, and seed variance is large
-     (±0.068 on PL, ±0.147 on within-season; individual runs 0.7605 to 1.0793 — the latter worse
-     than the class prior). The optimisation is better, not fixed.
+  3. **Seed variance is no longer the problem it was.** ±0.0022 on PL and ±0.0033 on within-season
+     after the leak fix, down from ±0.068 and ±0.147; best-epoch is consistent (3–6 on PL). The
+     earlier instability was the leak, not the optimiser. The model still overfits after its
+     validation minimum.
   4. **A protocol problem worth recording.** The validation and test folds do not rank the
      baselines the same way. On PL, B1 scores 0.8763 on validation (behind B0's 0.8249) and 0.7913
-     on test (ahead of B0). The residual model transfers well only where the two folds are
-     comparably hard — Serie A cross-season, gap 0.005, where it matches B1 — and badly where they
-     diverge (PL 0.085, within-season −0.039). Any future config selection on this module is
-     selecting against a fold that misranks the thing being measured.
+     on test (ahead of B0). Config selection on this module is therefore selecting against a fold
+     that misranks the thing being measured — worth remembering before reading much into any single
+     sweep winner.
 
-  Process note worth keeping: the evaluation methodology was sound throughout — temporal splits,
-  per-match bootstrap, validation-only sweeps — and none of it caught a wrong training loop, nor
-  the missing initial-state evaluation that made the residual floor unenforceable. The model had
-  **no unit tests at all** until the batching work started `tests/test_outcome_gnn.py`, now at 31.
-  Metric rigour does not substitute for testing the thing being measured.
+  **Process note, and it is the most transferable thing in this file.** Module 3's headline
+  conclusion has now been rewritten four times. Every single revision was caused by a defect in
+  this repository, and not one by new data:
+
+  | claim | falsified by |
+  |---|---|
+  | "significantly worse than B0 in 9/9; 300 labels are too few" | `optimiser.step()` inside the per-match loop |
+  | "the corpus cannot support capacity" | that same batch size of 1 |
+  | "cannot beat B1 even when handed it; variance is inherent" | 7 of 10 node features were full-match |
+
+  The evaluation methodology was sound the whole time — temporal splits, per-match bootstrap,
+  validation-only sweeps, `reject_random_split`, a truncation test on the state table — and it
+  caught **none** of them. Each was found by reading or exercising the code, not by a metric looking
+  wrong; two of the three were found only because a number looked *surprising* and got chased.
+
+  The specific gap worth generalising: the causality test guarded the *model* (does the mask leak?)
+  while the leak sat in the *features handed to it*. A test that starts downstream of the bug cannot
+  see it. `tests/test_outcome_gnn.py` went from 0 tests before this work to 34, and the two that
+  matter most — the state-table and node-feature truncation tests — are both of the form "rebuild
+  from truncated history and assert nothing changed". That shape is worth applying to every new
+  feature this project adds.
 
   Also measured: **pooling corpora is safe and mildly helpful** (B0 −0.005 to −0.011, B1 −0.017
   on the Premier League fold, B2 −0.17 to −0.23), so cross-provider training needs no domain

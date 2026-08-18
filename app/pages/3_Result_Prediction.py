@@ -262,7 +262,9 @@ if b1_here:
         + ("\n\n" + " ".join(others) if others else "")
         + "\n\nRead the splits against each other: an advantage that appears only on the "
         "confounded cross-season split is a property of that setting, not a general "
-        "improvement. The GNN's deficit is the one result consistent everywhere."
+        "improvement. B1's advantage over B0 is of exactly that kind. The graph model's is the "
+        "other way round — it ties B1 on both *unconfounded* splits and loses on the confounded "
+        "one, which is the more trustworthy direction for a result to point."
     )
 
 # ============================================================== paired test

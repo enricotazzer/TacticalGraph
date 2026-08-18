@@ -446,3 +446,120 @@ def test_untrained_state_competes_for_best_and_is_reported():
     assert min([history["val_loss_at_init"], *history["val_loss"]]) == pytest.approx(
         min(history["val_loss_at_init"], min(history["val_loss"]))
     )
+
+
+# --------------------------------------------------------------------------------------
+# Node-feature causality
+#
+# The mask test above protects the model. These protect the *features handed to it*, which is
+# where a real leak lived: `engineer_node_features` aggregated edges over the whole match, so 6
+# of the 10 topology features were full-match values repeated across all 16 windows. The model's
+# causal mask cannot help when the token for minute 15 already contains minute 90.
+# --------------------------------------------------------------------------------------
+
+
+def _windowed_tables(n_players: int = 8, n_windows: int = N_WINDOWS, seed: int = 0):
+    """Minimal windowed node/edge tables shaped like the persisted ones."""
+    import pandas as pd
+
+    rng = np.random.default_rng(seed)
+    node_rows, edge_rows = [], []
+    for window in range(n_windows):
+        for player in range(n_players):
+            node_rows.append({
+                "game_id": 1, "team_id": 10, "season": "2015-2016", "provider": "statsbomb",
+                "window_index": window, "player_id": player,
+                "mean_x": rng.uniform(10, 90), "mean_y": rng.uniform(5, 63),
+                "spread_x": rng.uniform(1, 9), "spread_y": rng.uniform(1, 9),
+                "touches": int(rng.integers(1, 20)),
+                "actions_all_types": int(rng.integers(1, 25)),
+                "passes_attempted": int(rng.integers(1, 15)),
+                "passes_completed": int(rng.integers(0, 10)),
+            })
+        # Edge structure deliberately differs per window, so a match-level aggregate is
+        # detectably different from a per-window one.
+        for _ in range(int(rng.integers(4, 12))):
+            source, target = rng.choice(n_players, size=2, replace=False)
+            edge_rows.append({
+                "game_id": 1, "team_id": 10, "season": "2015-2016", "provider": "statsbomb",
+                "window_index": window, "source": int(source), "target": int(target),
+                "weight": int(rng.integers(1, 6)),
+                "mean_length": rng.uniform(5, 40), "mean_dx": rng.uniform(-20, 30),
+            })
+    return pd.DataFrame(node_rows), pd.DataFrame(edge_rows)
+
+
+def test_window_features_are_not_computable_from_later_windows():
+    """THE leakage test for node features, mirroring the state table's truncation test.
+
+    Build the features for window t from the whole match, then rebuild from tables truncated at
+    t. The row for t must be identical -- otherwise it depended on the future.
+    """
+    import pandas as pd
+
+    from tacticalgraph.models.outcome_gnn_transformer import build_window_features
+    from tacticalgraph.models.role_gnn import TOPOLOGY_FEATURES
+
+    nodes, edges = _windowed_tables()
+    full = build_window_features(nodes, edges)
+    columns = ["player_id", *TOPOLOGY_FEATURES]
+
+    for checkpoint in (0, 5, 11):
+        truncated = build_window_features(
+            nodes[nodes["window_index"] <= checkpoint],
+            edges[edges["window_index"] <= checkpoint],
+        )
+        left = (
+            full[full["window_index"] == checkpoint][columns]
+            .sort_values("player_id").reset_index(drop=True)
+        )
+        right = (
+            truncated[truncated["window_index"] == checkpoint][columns]
+            .sort_values("player_id").reset_index(drop=True)
+        )
+        pd.testing.assert_frame_equal(
+            left, right, check_dtype=False,
+            obj=f"FUTURE LEAK: window {checkpoint} features change when later windows are removed",
+        )
+
+
+def test_edge_derived_window_features_vary_between_windows():
+    """Cheap guard for the same bug: constant-across-windows means match-level aggregation.
+
+    Every one of these was constant per player before the fix.
+    """
+    from tacticalgraph.models.outcome_gnn_transformer import build_window_features
+
+    nodes, edges = _windowed_tables()
+    features = build_window_features(nodes, edges)
+
+    for column in ("degree_in_norm", "degree_out_norm", "strength_in_norm",
+                   "strength_out_norm", "edge_share_in", "edge_share_out"):
+        varies = features.groupby("player_id")[column].nunique()
+        assert (varies > 1).any(), (
+            f"{column} is identical across all 16 windows for every player, which means it was "
+            "aggregated over the whole match"
+        )
+
+
+def test_match_level_keys_still_used_for_full_networks():
+    """Module 2's path must keep match-level aggregation, and must not silently drop rows.
+
+    The full-match tables carry a `window_index` column that is entirely null, so grouping on it
+    would drop every row -- which is why the keys are an explicit argument, not inferred.
+    """
+    from tacticalgraph.models.role_gnn import (
+        NETWORK_KEYS,
+        WINDOW_KEYS,
+        engineer_node_features,
+    )
+
+    nodes, edges = _windowed_tables(n_windows=1)
+    nodes = nodes.assign(window_index=None)
+    edges = edges.assign(window_index=None)
+
+    features = engineer_node_features(nodes, edges, group_keys=NETWORK_KEYS)
+    assert len(features) == len(nodes), "match-level aggregation must preserve every node row"
+
+    with pytest.raises(ValueError, match="nulls"):
+        engineer_node_features(nodes, edges, group_keys=WINDOW_KEYS)

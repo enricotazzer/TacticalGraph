@@ -109,14 +109,45 @@ class GraphBundle:
     scaler_std: np.ndarray = field(default_factory=lambda: np.ones(0))
 
 
-def engineer_node_features(nodes: pd.DataFrame, edges: pd.DataFrame) -> pd.DataFrame:
+NETWORK_KEYS: tuple[str, ...] = ("game_id", "team_id", "season", "provider")
+# A windowed network is identified by its window as well as its team-match. Aggregating without
+# `window_index` silently produces full-match values -- see `engineer_node_features`.
+WINDOW_KEYS: tuple[str, ...] = NETWORK_KEYS + ("window_index",)
+
+
+def engineer_node_features(
+    nodes: pd.DataFrame,
+    edges: pd.DataFrame,
+    group_keys: tuple[str, ...] = NETWORK_KEYS,
+) -> pd.DataFrame:
     """Derive the topology features from the persisted node/edge tables.
 
     All features are *within-network normalised* (a player's share of their team's passing)
     rather than raw counts. Raw counts would carry the provider's action-density signature;
     shares are comparable across providers, which is what the 2015/16 -> 2017/18 test needs.
+
+    **`group_keys` decides what "their team's passing" means, and getting it wrong is a silent
+    future leak.** Every aggregate below is computed within a group. On the full-match tables the
+    default is right. On the *windowed* tables the caller must pass `WINDOW_KEYS`: with the
+    match-level default, a player's edge-derived features become their whole-match values repeated
+    across all 16 windows, so a model predicting at minute 15 sees passing structure from minute
+    90. That was live in Module 3 until a truncation test caught it -- 6 of the 10 topology
+    features were full-match.
+
+    It is an explicit argument rather than something inferred from the presence of a
+    `window_index` column, because the full-match tables *do* carry that column (entirely null),
+    so any auto-detection would have to guess and would fail silently in one direction or the
+    other.
     """
-    keys = ["game_id", "team_id", "season", "provider"]
+    keys = list(group_keys)
+    missing = [k for k in keys if k not in nodes.columns or k not in edges.columns]
+    if missing:
+        raise KeyError(f"group_keys {missing} absent from the node/edge tables")
+    if nodes[keys].isna().any().any():
+        raise ValueError(
+            f"group_keys {keys} contain nulls, which pandas would silently drop from every "
+            "aggregate; pass keys that are fully populated for this table"
+        )
 
     out_agg = (
         edges.groupby(keys + ["source"])
