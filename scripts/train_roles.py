@@ -87,9 +87,8 @@ def build_node_threat(actions: pd.DataFrame, xt_values: pd.Series) -> pd.DataFra
     involvement = shot_chain_involvement(actions)
     keys = ["game_id", "team_id", "season", "provider", "player_id"]
     merged = threat.merge(involvement, on=keys, how="outer")
-    merged[["xt_generated", "shot_involvement"]] = merged[
-        ["xt_generated", "shot_involvement"]
-    ].fillna(0.0)
+    shares = ["xt_generated", "shot_involvement", "shot_conversion"]
+    merged[shares] = merged[shares].fillna(0.0)
     return merged
 
 

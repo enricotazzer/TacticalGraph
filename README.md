@@ -56,7 +56,7 @@ positive ones:
 streamlit run app/Home.py
 ```
 
-Runs from a **~7 MB bundle committed to this repo** (`demo_data/`), so it works on a fresh
+Runs from a **~7.4 MB bundle committed to this repo** (`demo_data/`), so it works on a fresh
 clone with no external drive and no re-ingestion. The bundle is small enough because
 `engineer_node_features()` derives every model input from the network node/edge tables — the
 55 MB action store and 1.4 GB of raw provider JSON are not needed for anything the demo shows.
@@ -83,7 +83,7 @@ of data provider**. Buffon's six nearest neighbours are all goalkeepers.
 To rebuild the bundle after changing the pipeline:
 
 ```bash
-python scripts/export_demo_bundle.py     # writes demo_data/ (~7 MB)
+python scripts/export_demo_bundle.py     # writes demo_data/ (~7.4 MB)
 pytest tests/test_demo_bundle.py         # manifest integrity + checkpoint round-trip
 ```
 
@@ -351,6 +351,14 @@ threat answers *how valuable were this player's actions*, while the 4-class targ
 they play*. Those turn out to be close to orthogonal. Pass **direction** helped precisely because
 it is geometric — a keeper's +30.3 m and a forward's +13.7 m received are facts about pitch
 location — and pass **value** is not.
+
+A fifth feature, `shot_conversion`, was added afterwards to test that reading. It removes the
+volume component of `shot_involvement` (ρ vs `degree_total` falls from +0.71 to +0.05) at the cost
+of a much higher positional R² (0.172 → 0.581). If the explanation above is right it should
+*hurt*, because the model already receives pitch position directly — and it does:
+`all+threat+conv` scores **+2.52 pp** and **+1.74 pp** on the two unconfounded splits against
+`all`'s +2.65 and +2.53, improving only on the confounded one. A prediction made from the
+diagnosis and then checked, rather than a result explained after the fact.
 
 The features are kept, because they are what the leaderboard needs even though the classifier does
 not: see [Limitations](#limitations) for what they did to the volume-proxy problem, which is
@@ -938,18 +946,18 @@ pytest                                       # 74 tests
   of only 3-4 actions per player, with ~5 of 11 players reaching 5); and a **defensive-phase
   graph is not buildable from events at all**, only team-level scalars such as line height and
   recovery zones. See [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
-- **Pass-only edges make centrality a volume proxy. All three candidate fixes are now built, and
-  they moved the composition without fixing the underlying problem.** Raw `degree_total` still
-  reads **84% MID against a 31% population share**, with goalkeepers at 0%. xT-weighted edges
-  overshoot rather than correct: `pagerank_xt` swings to **90% FWD** (92% on Serie A), trading a
-  midfielder leaderboard for a forward one. Only `strength_out_xt` lands near the population
-  (0/44/32/24 against 7/35/32/26). Two pre-registered targets failed outright — the xT-weighted
-  metrics **agree with each other *less*** than the same seven metrics on pass counts (mean
-  pairwise Spearman 0.65 vs 0.71 on the Premier League, 0.53 vs 0.70 on Serie A), and `shot_involvement` correlates
-  **+0.71** with `degree_total`, i.e. it is substantially a third volume proxy. Role-relative
-  z-scoring does move every metric to roughly the population mix, but that is true by
-  construction. **Reweighting the edges of a pass-only graph does not make it measure tactical
-  importance**; see [Module 2](#module-2--functional-role-gnn-embedding-vs-classical-centrality).
+- **Pass-only edges make centrality a volume proxy. Every candidate fix is now built, and the
+  cause is measured: they are all still functions of pitch position.** Regressing each metric on
+  mean pitch position (quadratically — volume peaks in midfield, so a linear fit would miss the
+  arch) shows xT weighting makes a metric **more** positional in 6 of 7 cases: `pagerank` goes
+  from R² 0.416 to **0.773**. That is why `pagerank_xt` swings from a 76% midfielder top-50 to a
+  **90% forward** one — pass volume peaks in midfield, xThreat peaks in the box, and both are
+  position. `shot_involvement` is a third volume proxy (**ρ +0.71** with `degree_total`); fixing
+  its denominator (`shot_conversion`) drops that to **+0.05** but raises its positional R² to
+  0.581, trading one confound for the other. Role-relative z-scoring evens the mix but is true by
+  construction. **Two things did help**: `strength_out_xt` — the one metric that got *less*
+  positional — and residualising against position, which improves 6 of 7 metrics.
+  See [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) for the full tables.
 - **Event data is a partial representation of football.** Off-ball movement, verbal
   communication and tactical intent are not observable here, and no amount of modelling
   recovers them.
@@ -1024,8 +1032,8 @@ app/
   _shared.py           cached loaders, status banner, forces the Agg backend
   pages/1..6_*.py      one page per macro phase
 scripts/               one entry point per phase, plus export_demo_bundle.py
-demo_data/             ~7 MB committed bundle -- the demo's input
-tests/                 158 tests
+demo_data/             ~7.4 MB committed bundle -- the demo's input
+tests/                 166 tests
 ```
 
 ## References

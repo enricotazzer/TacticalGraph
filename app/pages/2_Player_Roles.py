@@ -296,8 +296,17 @@ if missing:
 # Three ways to rank the same graph, so the volume-proxy limitation is visible in the app
 # rather than only in the docs. "pass volume" is the classical baseline; "xT-weighted" reweights
 # every edge by the threat it created; "role-relative" z-scores within coarse role.
-BASIS_SUFFIX = {"pass volume": "", "xT-weighted": "_xt", "role-relative (z)": "_z"}
-THREAT_CHOICES = [m for m in ("xt_generated", "shot_involvement") if m in named.columns]
+BASIS_SUFFIX = {
+    "pass volume": "",
+    "xT-weighted": "_xt",
+    "role-relative (z)": "_z",
+    "position-residual (r)": "_r",
+}
+THREAT_CHOICES = [
+    m
+    for m in ("xt_generated", "shot_involvement", "shot_conversion")
+    if m in named.columns
+]
 METRIC_CHOICES = list(PLAYER_METRICS) + THREAT_CHOICES
 
 controls = st.columns(5)
@@ -336,8 +345,12 @@ st.caption(
     "Switch **Weighting** to see the limitation directly. On pass volume the list is almost all "
     "midfielders — 84% of the top 50 by `degree_total`, against a 31% population share, and no "
     "goalkeeper anywhere. xT-weighting does not fix that so much as invert it: `pagerank` swings "
-    "to 90% forwards. Role-relative z-scores make every role rankable, but that is largely true "
-    "by construction — z-scoring within role forces the mix toward the population."
+    "to 90% forwards, because xThreat is a spatial surface and weighting by it makes centrality "
+    "*more* positional, not less (R² against pitch position 0.42 → 0.77). Role-relative z-scores "
+    "make every role rankable, but that is largely true by construction. "
+    "**position-residual** subtracts a quadratic fit on mean pitch position, leaving whatever is "
+    "not explained by where the player stands — the only option here that is neither a volume "
+    "proxy nor representative by construction."
 )
 
 # ============================================================== pitch by metric

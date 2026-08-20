@@ -246,9 +246,80 @@ orthogonal here.
 Worth recording as a reproducibility check: re-running `all` after all this work reproduces
 **+2.65 pp exactly**, to four decimal places on the mean.
 
+### Diagnosis: every fix is still a function of pitch position
+
+The four failures above have one cause, and it is measurable.
+`features/centrality.residualise_against_position` regresses each metric on the player's mean
+pitch position — **quadratically**, because pass volume peaks in midfield and falls off toward
+both goals, so a linear fit would leave that arch in the residual and understate exactly what is
+being tested. The R² is then the share of the metric that is position and nothing else.
+
+| Metric | volume R² | xT-weighted R² | change |
+|---|---|---|---|
+| `pagerank` | 0.416 | **0.773** | +0.357 |
+| `closeness` | 0.214 | **0.709** | +0.495 |
+| `eigenvector` | 0.431 | **0.728** | +0.297 |
+| `strength_in` | 0.272 | **0.668** | +0.396 |
+| `clustering` | 0.259 | 0.349 | +0.090 |
+| `betweenness` | 0.341 | 0.359 | +0.018 |
+| `strength_out` | 0.368 | **0.244** | **−0.124** |
+
+(Premier League; Serie A agrees, `pagerank` 0.404 → 0.785.) **xT weighting made the metric more
+positional in 6 of 7 cases on the Premier League and 5 of 7 on Serie A.** xThreat *is* a spatial
+surface — value rises toward the opponent goal — so weighting edges by it moves centrality closer
+to a pure readout of where a player stands. That is the mechanism behind the 90% FWD swing: pass
+volume peaks in midfield, xT peaks in the box, and both are position.
+
+**The one real exception is `strength_out`, which got *less* positional** — and it is also the
+only xT-weighted metric whose top-50 composition landed near the population. Those two facts are
+the same fact, and `strength_out_xt` is the best non-mechanical metric this work produced (see
+the ranking below).
+
+### `shot_conversion`: the same trade, in the other direction
+
+`shot_involvement`'s denominator is the *team's* shot count, constant within a team-match, so it
+never normalises the player's own touch frequency. `shot_conversion`
+(`features/chains.shot_chain_involvement`) divides by the possessions the player was actually in:
+
+| | ρ vs `degree_total` | positional R² | top-50 |
+|---|---|---|---|
+| `shot_involvement` | **+0.710** | 0.172 | 48% MID |
+| `shot_conversion` | **+0.048** | **0.581** | **80% FWD** |
+
+The volume signal is gone (−0.075 on Serie A, i.e. slightly negative). What replaces it is
+position. **The two denominators trade one confound for the other and neither is clean** — a
+sharper statement of the same finding than either metric gives alone.
+
+As a GNN feature it does not help either: `all+threat+conv` scores **+2.52 pp** (Premier League)
+and **+1.74 pp** (within-season) against `all`'s +2.65 and +2.53, i.e. worse on both unconfounded
+splits, and better only on the confounded one (+6.58 vs +5.74). Predicted by its R²: the model
+already receives pitch position directly, so a more-positional feature adds noise, not signal.
+
+### Which metric is least role-biased, ranked
+
+Total-variation distance of each top-50 from the population role mix, averaged over both corpora
+(0 = perfectly representative):
+
+| Metric | distance | note |
+|---|---|---|
+| `betweenness_xt_z`, `strength_out_z`, `pagerank_z` | 4.2–5.7 | z-scored — **true by construction** |
+| **`strength_out_xt`** | **11.2** | best metric not made representative by construction |
+| `xt_generated` | 16.0 | |
+| `shot_conversion_r` | 21.1 | best residualised metric |
+| `strength_out` | 30.0 | best raw volume metric |
+| `degree_total` | 51.9 | the original complaint |
+| `shot_conversion` | 59.1 | |
+| `pagerank_xt` | 66.1 | worst of all |
+
+Residualising improves 6 of the 7 metrics measured (`degree_total` 51.9 → 33.1, `shot_conversion`
+59.1 → 21.1); `xt_generated` is the exception and gets worse (16.0 → 27.0).
+
 **What this establishes.** Reweighting the edges of a pass-only graph changes *which* position
-the leaderboard is biased toward without making it measure tactical importance. The limitation
-is not the weighting; it is that a graph whose only relation is "passed to" describes ball
-circulation, and ball circulation is positional. Fixing it needs a different relation — off-ball
-movement, defensive actions, or space occupied — and the first two are bounded by what event
-data records (median 3-4 out-of-possession actions per player) and the third needs tracking.
+the leaderboard is biased toward without making it measure tactical importance — and usually
+increases the positional content rather than reducing it. The limitation is not the weighting; it
+is that a graph whose only relation is "passed to" describes ball circulation, and ball
+circulation is positional. Two things did help and are worth keeping: **`strength_out_xt`**, and
+**residualising against position**, which is cheap and improves nearly everything it touches.
+Beyond that, fixing this needs a different *relation* — off-ball movement, defensive actions, or
+space occupied — and the first two are bounded by what event data records (median 3-4
+out-of-possession actions per player) and the third needs tracking.

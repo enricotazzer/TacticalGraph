@@ -155,6 +155,15 @@ not. These are real limitations, not speculation — the measurements behind the
    needed, and the two candidates for it (defensive actions, off-ball movement) are bounded by
    what event data records.
 
+   **The cause is now measured rather than inferred.**
+   `features/centrality.residualise_against_position` regresses each metric on mean pitch position
+   with a quadratic basis (volume peaks in midfield, so a linear fit would leave that arch in the
+   residual and understate the very thing being tested). xT weighting makes a metric **more**
+   positional in 6 of 7 cases — `pagerank` R² 0.416 → **0.773** — because xThreat is itself a
+   spatial surface. Two things did help and are worth keeping: **`strength_out_xt`**, the one
+   metric that got *less* positional (0.368 → 0.244) and the best non-mechanical metric produced
+   here; and **residualisation itself**, which improves 6 of 7 metrics' role composition.
+
    The baseline it is all measured against: midfielders take **84% of the top 50 by degree**
    against a 31-33% population share, and goalkeepers take 0% on all ten metrics. It replicates on
    the single-provider Premier League corpus, so it is not a harmonisation artefact. Per fix:
@@ -206,6 +215,14 @@ not. These are real limitations, not speculation — the measurements behind the
      `degree_total` on the Premier League against a pre-registered bar of < 0.70, so it is
      largely measuring involvement again. `xt_generated` is the feature that clears that bar
      comfortably (+0.457).
+     **`shot_conversion` fixes the denominator and swaps the confound.** Dividing by the
+     possessions the player was actually in (rather than the team's shot count, which is constant
+     within a team-match and so never normalises their touch frequency) drops ρ vs `degree_total`
+     to **+0.048** on the Premier League and −0.075 on Serie A. What is left is position: its
+     positional R² rises from 0.172 to **0.581**, and its top-50 is 80% forwards. As a GNN feature
+     it is worse than `all` on both unconfounded splits (+2.52 and +1.74 pp against +2.65 and
+     +2.53), which is what the R² predicts — the model already gets position directly. Kept as
+     `all+threat+conv` so the published `all+threat` stays comparable at 22 features.
 2. **Verticality as a team style feature.** Validated but not yet a model input: mean pass
    verticality ranks Serie A teams sensibly (Napoli and Juventus most patient in both seasons;
    Sassuolo and Crotone most vertical) and survives the provider change at Spearman ρ = 0.509

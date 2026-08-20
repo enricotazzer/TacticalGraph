@@ -315,3 +315,136 @@ def role_relative_metrics(
         std = grouped.transform(lambda s: s.std(ddof=0))
         frame[f"{metric}{suffix}"] = ((frame[metric] - mean) / std.replace(0.0, np.nan)).fillna(0.0)
     return frame
+
+
+def residualise_against_position(
+    aggregated: pd.DataFrame,
+    metrics: tuple[str, ...] = PLAYER_METRICS,
+    position_columns: tuple[str, ...] = ("mean_x", "mean_y"),
+    group_columns: tuple[str, ...] = ("season", "provider"),
+    suffix: str = "_r",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fit each metric on the player's mean pitch position and keep only what the fit misses.
+
+    `role_relative_metrics` works *around* the positional artefact by normalising inside a role.
+    This measures it head-on. Four candidate fixes have been tried -- pass direction, role-relative
+    z-scoring, xT-weighted edges, shot-chain involvement -- and none removed the positional signal;
+    xT-weighting inverted it instead, taking `rho(pagerank_xt, mean_x)` to +0.927 against +0.298
+    for `rho(pagerank, mean_x)`. Every one of those was judged by proxy, on how the leaderboard
+    looked afterwards. The direct question is what share of a metric's variance the player's mean
+    pitch position accounts for, and that share is an R^2: a metric that is only a statement about
+    where a player stands has nothing left once position is fitted out, and `r2_table` reports it
+    as a number instead of an impression. The residual is what a defensible metric would be built
+    on; the R^2 beside it is what the caller actually reports.
+
+    **The fit is quadratic, and that is the load-bearing decision.** Pass volume is not monotonic
+    in `mean_x`: it peaks in midfield and falls away toward both goals, so degree-against-position
+    is an inverted U. A straight line through a U fits nothing, leaves the whole arch standing in
+    the residual, and reports a low R^2 -- it would *understate* how positional the metric is,
+    which is the one direction of error a positionality detector must not make. The design matrix
+    is therefore `[1, x, y, x^2, y^2, x*y]`: quadratic in both pitch axes, plus the cross term that
+    lets the fitted surface tilt, since a wide player deep is not a wide player high.
+
+    The fit runs once per `group_columns` because pitch-position distributions differ by provider
+    and by season -- confounded in this corpus, as ever -- and a pooled fit would charge that
+    difference to the player rather than to the coordinate frame it belongs to.
+
+    A group that cannot be fitted gets a residual of 0.0 and an R^2 of 0.0 rather than a NaN or a
+    fit. Two cases: fewer rows than the six design columns, where the system is underdetermined and
+    would otherwise interpolate its way to a spurious R^2 of 1.0; and a metric with no variance
+    inside the group, where there is no share of variance for position to explain. This is the
+    convention `role_relative_metrics` already uses -- 0.0 reads as "no evidence", where a NaN
+    would silently drop the player out of any downstream sort. Rows carrying a non-finite metric or
+    position are held out of the fit and keep a 0.0 residual for the same reason; `eigenvector` and
+    `pagerank` are NaN by design on networks where they do not converge.
+
+    A metric absent from `aggregated` is skipped, following `role_relative_metrics`. A missing
+    *position* column raises instead: there is no fit to be had without it, and handing back an
+    unresidualised frame wearing residual column names is worse than stopping.
+
+    Returns `(frame, r2_table)`. `frame` is `aggregated` plus one `f"{metric}{suffix}"` residual
+    column per fitted metric; `r2_table` carries `[*group_columns, "metric", "r2", "n"]`, where `n`
+    is the number of rows that entered that group's fit.
+    """
+    missing = [column for column in position_columns if column not in aggregated.columns]
+    if missing:
+        raise KeyError(
+            f"position columns {missing} absent from the aggregated table; centrality cannot be "
+            "residualised against a position the frame does not carry"
+        )
+
+    frame = aggregated.copy()
+    present = [metric for metric in metrics if metric in frame.columns]
+
+    positions = frame[list(position_columns)].to_numpy(dtype=float)
+    n_axes = len(position_columns)
+    # 1 intercept + n linear + n squared + one cross term per axis pair; 6 for the default (x, y).
+    n_terms = 1 + 2 * n_axes + n_axes * (n_axes - 1) // 2
+
+    residuals = {metric: np.zeros(len(frame)) for metric in present}
+    r2_rows: list[dict[str, object]] = []
+
+    groups = (
+        frame.groupby(list(group_columns), dropna=False).indices
+        if group_columns
+        else {(): np.arange(len(frame))}
+    )
+
+    for key, rows in groups.items():
+        key_values = key if isinstance(key, tuple) else (key,)
+        block = positions[rows]
+        placed = np.isfinite(block).all(axis=1)
+
+        # Standardise within the group before squaring. `mean_x` is metres on a 0-105 pitch, so a
+        # raw x^2 column runs to ~11000 while x sits near 50 and the intercept is 1 -- four orders
+        # of column scale in one design, which costs lstsq precision on the linear terms and buys
+        # nothing. Centring also decorrelates x from x^2, so the quadratic term reads as curvature
+        # rather than quietly re-fitting the slope.
+        scaled = np.zeros_like(block)
+        if placed.any():
+            mean = block[placed].mean(axis=0)
+            std = block[placed].std(axis=0)
+            scaled = (block - mean) / np.where(std > 0.0, std, 1.0)
+
+        design_columns = [np.ones(len(rows)), *scaled.T, *(scaled.T**2)]
+        for i in range(n_axes):
+            for j in range(i + 1, n_axes):
+                design_columns.append(scaled[:, i] * scaled[:, j])
+        design = np.column_stack(design_columns)
+
+        for metric in present:
+            values = frame[metric].to_numpy(dtype=float)[rows]
+            fitted = placed & np.isfinite(values)
+            target = values[fitted]
+
+            # The degeneracy test is on the spread relative to the level, not on SS_tot against 0.
+            # A constant metric does not produce an SS_tot of exactly zero: `target.mean()` lands
+            # an ulp off the value it is averaging and the squared deviations pile up as float
+            # noise, so `SS_tot > 0` passes and R^2 comes back as noise over noise -- about -10 in
+            # practice, which is worse than the NaN this function exists to avoid.
+            level = float(np.abs(target).max()) if target.size else 0.0
+            flat = target.size == 0 or float(np.ptp(target)) <= 1e-12 * level
+
+            if target.size >= n_terms and not flat:
+                ss_tot = float(((target - target.mean()) ** 2).sum())
+                coefficients, *_ = np.linalg.lstsq(design[fitted], target, rcond=None)
+                residual = target - design[fitted] @ coefficients
+                residuals[metric][rows[fitted]] = residual
+                r2 = 1.0 - float((residual**2).sum()) / ss_tot
+            else:
+                r2 = 0.0
+
+            r2_rows.append(
+                {
+                    **dict(zip(group_columns, key_values, strict=True)),
+                    "metric": metric,
+                    "r2": r2,
+                    "n": int(target.size),
+                }
+            )
+
+    for metric in present:
+        frame[f"{metric}{suffix}"] = residuals[metric]
+
+    r2_table = pd.DataFrame(r2_rows, columns=[*group_columns, "metric", "r2", "n"])
+    return frame, r2_table

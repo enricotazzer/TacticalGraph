@@ -539,6 +539,56 @@ def test_shot_chain_involvement_is_a_share_of_the_teams_shot_chains():
     assert out.between(0.0, 1.0).all()
 
 
+def test_shot_conversion_conditions_on_the_players_own_involvement():
+    """The denominator is the whole point.
+
+    `shot_involvement` divides by the team's shot count, which is constant within a team-match, so
+    a player who is simply in more possessions scores higher. `shot_conversion` divides by the
+    possessions that player was actually in, which is what removes the volume component (+0.71 vs
+    `degree_total` on the Premier League corpus, against +0.04 for conversion).
+    """
+    from tacticalgraph.features.chains import shot_chain_involvement
+
+    actions, _ = _threat_windows()
+    out = shot_chain_involvement(actions).set_index("player_id")
+
+    # Player 10 acts in both possessions, both of which end in a shot.
+    assert out.loc[10, "shot_involvement"] == pytest.approx(1.0)
+    assert out.loc[10, "shot_conversion"] == pytest.approx(1.0)
+    # Player 20 is in one of the team's two shot chains, and that is the only chain it appears in:
+    # half the team's shots, but every possession it touched ended in one.
+    assert out.loc[20, "shot_involvement"] == pytest.approx(0.5)
+    assert out.loc[20, "shot_conversion"] == pytest.approx(1.0)
+    assert out["shot_conversion"].between(0.0, 1.0).all()
+
+
+def test_shot_conversion_separates_a_bystander_from_a_finisher():
+    """A player in many possessions and few shots must score below one in few possessions and
+    the same shots -- the asymmetry `shot_involvement` cannot express."""
+    from tacticalgraph.features.chains import shot_chain_involvement
+
+    rows = []
+    # Possession 0 ends in a shot; both players are in it.
+    rows += [(0, 10, "pass"), (0, 20, "shot")]
+    # Possessions 1-4 have no shot, and only player 10 is in them.
+    for possession in (1, 2, 3, 4):
+        rows += [(possession, 10, "pass")]
+    frame = pd.DataFrame(rows, columns=["possession_id", "player_id", "type_name"])
+    frame["action_id"] = range(len(frame))
+    frame["game_id"] = 1
+    frame["team_id"] = 1
+    frame["season"] = "2015-2016"
+    frame["provider"] = "statsbomb"
+
+    out = shot_chain_involvement(frame).set_index("player_id")
+    # Identical on the team-denominator metric...
+    assert out.loc[10, "shot_involvement"] == pytest.approx(1.0)
+    assert out.loc[20, "shot_involvement"] == pytest.approx(1.0)
+    # ...and the conditional one tells them apart.
+    assert out.loc[10, "shot_conversion"] == pytest.approx(0.2)
+    assert out.loc[20, "shot_conversion"] == pytest.approx(1.0)
+
+
 def test_threat_features_are_confined_to_their_window():
     """Rebuild from truncated history and assert nothing changed.
 
@@ -649,3 +699,169 @@ def test_node_threat_with_duplicate_rows_raises_rather_than_fanning_out():
     ])
     with pytest.raises(ValueError, match="changed the row count"):
         engineer_node_features(nodes, edges, node_threat=node_threat)
+
+
+# --------------------------------------------------------------------------------------
+# Residualising centrality against pitch position
+#
+# The within-role z-score above works *around* the positional artefact. These tests pin the
+# function that measures it head-on: fit each metric on the player's mean pitch position and
+# report the R^2. The fit is quadratic because pass volume peaks in midfield and falls away toward
+# both goals -- an inverted U that a straight line cannot see at all, which is what
+# `test_inverted_u_is_invisible_to_a_linear_fit` exists to demonstrate.
+# --------------------------------------------------------------------------------------
+
+
+def _pitch_fixture(n: int = 12) -> pd.DataFrame:
+    """`n` players strung along one pitch, in a single (season, provider) group.
+
+    `mean_x` walks goal to goal so a metric can be written as an explicit function of it, and
+    `mean_y` cycles over three lanes so the y and cross terms of the design are not degenerate.
+    """
+    import numpy as np
+
+    return pd.DataFrame({
+        "season": "2015-2016",
+        "provider": "statsbomb",
+        "player_id": range(n),
+        "mean_x": np.linspace(5.0, 100.0, n),
+        "mean_y": np.tile([15.0, 34.0, 53.0], n // 3),
+        "n_matches": 20,
+    })
+
+
+def test_exact_quadratic_in_position_leaves_nothing_behind():
+    """A metric that *is* the design matrix residualises to zero with an R^2 of 1."""
+    import numpy as np
+
+    from tacticalgraph.features.centrality import residualise_against_position
+
+    frame = _pitch_fixture()
+    frame["pagerank"] = (
+        2.0
+        + 0.5 * frame["mean_x"]
+        - 0.004 * frame["mean_x"] ** 2
+        + 0.03 * frame["mean_y"]
+        - 0.0002 * frame["mean_y"] ** 2
+        + 0.001 * frame["mean_x"] * frame["mean_y"]
+    )
+
+    out, r2 = residualise_against_position(frame, metrics=("pagerank",))
+    assert r2.loc[0, "r2"] == pytest.approx(1.0)
+    assert r2.loc[0, "n"] == 12
+    assert np.allclose(out["pagerank_r"].to_numpy(), 0.0, atol=1e-10)
+
+
+def test_inverted_u_is_invisible_to_a_linear_fit():
+    """The load-bearing test: a linear basis would call the most positional metric positionless.
+
+    Degree peaks in midfield and falls away toward both goals. Fitted quadratically that arch is
+    fully accounted for, R^2 = 1. Fitted linearly it is symmetric about the halfway line, so the
+    best straight line through it is flat and the *entire* variance survives into the residual --
+    a metric that is a pure function of position would be reported as having nothing to do with
+    position, which is the one direction of error this function must not make.
+    """
+    import numpy as np
+
+    from tacticalgraph.features.centrality import residualise_against_position
+
+    frame = _pitch_fixture()
+    frame["degree_total"] = 40.0 * (1.0 - ((frame["mean_x"] - 52.5) / 52.5) ** 2)
+
+    out, r2 = residualise_against_position(frame, metrics=("degree_total",))
+    assert r2.loc[0, "r2"] == pytest.approx(1.0)
+    assert np.allclose(out["degree_total_r"].to_numpy(), 0.0, atol=1e-10)
+
+    # The same data on a linear basis [1, x, y], fitted here rather than in the function: there is
+    # no linear mode to switch on, and this is the statement of why there should not be one.
+    target = frame["degree_total"].to_numpy(dtype=float)
+    linear = np.column_stack([
+        np.ones(len(frame)), frame["mean_x"].to_numpy(), frame["mean_y"].to_numpy()
+    ])
+    coefficients, *_ = np.linalg.lstsq(linear, target, rcond=None)
+    residual = target - linear @ coefficients
+    ss_tot = ((target - target.mean()) ** 2).sum()
+
+    assert 1.0 - (residual**2).sum() / ss_tot < 0.01, "the linear fit must explain ~nothing"
+    # And the leftover is the arch itself, not scatter: it still spans most of the metric's range.
+    assert np.ptp(residual) > 0.9 * np.ptp(target)
+
+
+def test_position_blind_metric_keeps_all_of_its_variance_and_its_ranking():
+    """Three players stand on the same spot and differ, so position cannot explain the difference.
+
+    Every spot carries the same three offsets, chosen to sum to zero, so the between-spot means
+    are identical and the within-spot spread is unreachable by any function of position whatever
+    its degree. The fit collapses to an intercept: R^2 is 0, the residual is the metric minus a
+    constant, and the leaderboard it produces is the raw one.
+    """
+    from tacticalgraph.features.centrality import residualise_against_position
+
+    rows = []
+    for spot in range(12):
+        step = 0.0001 * (2 * spot + 1)
+        for offset in (-5.0, 2.0, 3.0):  # sums to zero, so every spot shares one mean
+            rows.append({
+                "season": "2015-2016", "provider": "statsbomb", "player_id": len(rows),
+                "mean_x": 5.0 + 8.0 * spot, "mean_y": 15.0 + 19.0 * (spot % 3),
+                "pagerank": 0.20 + offset * step, "n_matches": 20,
+            })
+    frame = pd.DataFrame(rows)
+
+    out, r2 = residualise_against_position(frame, metrics=("pagerank",))
+    assert r2.loc[0, "r2"] == pytest.approx(0.0, abs=1e-9)
+    assert out["pagerank_r"].var() == pytest.approx(out["pagerank"].var())
+    assert (out["pagerank"].rank().to_numpy() == out["pagerank_r"].rank().to_numpy()).all()
+
+
+def test_constant_metric_scores_zero_r2_rather_than_noise_over_noise():
+    """SS_tot for a constant metric is float noise, not 0, and noise over noise is not an R^2.
+
+    `target.mean()` sits an ulp off the value it averages, so an unguarded `1 - SS_res/SS_tot`
+    returns roughly -10 here. Same convention as `role_relative_metrics`: 0.0 reads as "no
+    evidence", where a NaN or a spurious negative would corrupt any downstream sort.
+    """
+    import numpy as np
+
+    from tacticalgraph.features.centrality import residualise_against_position
+
+    frame = _pitch_fixture()
+    frame["pagerank"] = 0.05
+
+    out, r2 = residualise_against_position(frame, metrics=("pagerank",))
+    assert r2.loc[0, "r2"] == 0.0
+    assert not out["pagerank_r"].isna().any()
+    assert np.allclose(out["pagerank_r"].to_numpy(), 0.0)
+
+
+def test_group_too_small_to_fit_returns_zero_rather_than_a_perfect_fit():
+    """Four rows cannot determine six coefficients; lstsq would interpolate them to R^2 = 1."""
+    import numpy as np
+
+    from tacticalgraph.features.centrality import residualise_against_position
+
+    big = _pitch_fixture()
+    big["degree_total"] = 40.0 * (1.0 - ((big["mean_x"] - 52.5) / 52.5) ** 2)
+    small = big.iloc[:4].copy()
+    small["provider"] = "wyscout"
+    small["player_id"] = range(100, 104)
+    frame = pd.concat([big, small], ignore_index=True)
+
+    out, r2 = residualise_against_position(frame, metrics=("degree_total",))
+    scores = r2.set_index("provider")
+
+    assert scores.loc["wyscout", "r2"] == 0.0
+    assert scores.loc["wyscout", "n"] == 4
+    assert np.allclose(out.loc[out["provider"] == "wyscout", "degree_total_r"].to_numpy(), 0.0)
+    # The fittable group is untouched by it: one unfittable group must not poison the table.
+    assert scores.loc["statsbomb", "r2"] == pytest.approx(1.0)
+
+
+def test_missing_position_column_raises_rather_than_skipping():
+    """Without position there is no fit, and the frame must not look as if there was."""
+    from tacticalgraph.features.centrality import residualise_against_position
+
+    frame = _pitch_fixture()
+    frame["pagerank"] = 0.1
+    with pytest.raises(KeyError, match="mean_y"):
+        residualise_against_position(frame.drop(columns=["mean_y"]), metrics=("pagerank",))

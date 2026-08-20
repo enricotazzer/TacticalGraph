@@ -181,7 +181,24 @@ def shot_chain_involvement(
     actions: pd.DataFrame,
     group_keys: tuple[str, ...] = ("game_id", "team_id", "season", "provider"),
 ) -> pd.DataFrame:
-    """Share of a group's shot-ending possessions that each player took at least one action in.
+    """Two ways of asking whether a player was involved in shots, with different denominators.
+
+    `shot_involvement` is the player's share of the group's shot-ending possessions.
+    `shot_conversion` is the share of the possessions *the player was in* that ended in a shot.
+
+    **The denominator is the whole point, and the first one does not do what it was built to do.**
+    `shot_involvement` divides by a quantity that is constant within a team-match, so it never
+    normalises away the player's own touch frequency: a player who is in more possessions is in
+    more shot-ending possessions, and the metric inherits that. Measured on the Premier League
+    corpus it correlates **+0.71** with `degree_total`, against a pre-registered bar of < 0.70 --
+    i.e. it is substantially a third volume proxy, which is exactly what it was meant not to be.
+    `shot_conversion` conditions on the player's own involvement instead, and the volume signal
+    collapses: **rho vs `degree_total` falls from +0.69 to +0.04** on the same cohort.
+
+    What survives that is *not* role-neutral. `shot_conversion`'s top 50 is 74% forwards against a
+    26% population share, because forwards are in the box when shots happen. Removing the volume
+    component leaves the positional one, which is the finding these features were built to test
+    rather than a defect in them. See `features/centrality.residualise_against_position`.
 
     This is the one proposed metric that ranks a player on the *outcome* of the possessions they
     appear in, rather than on pass volume or on receiving direction. That is the limitation it
@@ -214,12 +231,14 @@ def shot_chain_involvement(
     `actions` first -- it is a property of the windowed network tables, not of the action log --
     and its absence raises here rather than silently returning full-match shares.
 
-    A group with no shot-ending possession gives every one of its players 0.0, not NaN: the same
-    convention as the `_safe_ratio` shares elsewhere, where "no evidence" reads as zero and a NaN
-    would drop the player out of any downstream sort.
+    A group with no shot-ending possession gives every one of its players 0.0 on both metrics,
+    not NaN: the same convention as the `_safe_ratio` shares elsewhere, where "no evidence" reads
+    as zero and a NaN would drop the player out of any downstream sort. `shot_conversion` is
+    additionally 0.0 for a player with no actions in the group at all, which cannot arise from
+    this function's own universe but can if a caller reindexes the result.
     """
     keys = list(dict.fromkeys(group_keys))
-    columns = [*keys, "player_id", "shot_involvement"]
+    columns = [*keys, "player_id", "shot_involvement", "shot_conversion"]
 
     chains = shot_possessions(actions)
     if not chains:
@@ -244,6 +263,16 @@ def shot_chain_involvement(
         .rename("_player_chains")
         .reset_index()
     )
+    # `shot_conversion`'s denominator: every distinct possession the player appeared in, shot or
+    # not. Counted from the unfiltered frame, so it is the player's own exposure rather than the
+    # team's shot count.
+    touched = (
+        frame.drop_duplicates([*chain_keys, "player_id"])
+        .groupby([*keys, "player_id"], dropna=False)
+        .size()
+        .rename("_player_touched")
+        .reset_index()
+    )
     per_group = (
         involved.drop_duplicates(chain_keys)
         .groupby(keys, dropna=False)
@@ -252,21 +281,27 @@ def shot_chain_involvement(
         .reset_index()
     )
 
-    table = universe.merge(per_player, on=[*keys, "player_id"], how="left").merge(
-        per_group, on=keys, how="left"
+    table = (
+        universe.merge(per_player, on=[*keys, "player_id"], how="left")
+        .merge(touched, on=[*keys, "player_id"], how="left")
+        .merge(per_group, on=keys, how="left")
     )
-    table["_player_chains"] = table["_player_chains"].fillna(0.0)
-    table["_group_chains"] = table["_group_chains"].fillna(0.0)
+    for column in ("_player_chains", "_group_chains", "_player_touched"):
+        table[column] = table[column].fillna(0.0)
     table["shot_involvement"] = (
         table["_player_chains"] / table["_group_chains"].replace(0.0, np.nan)
+    ).fillna(0.0)
+    table["shot_conversion"] = (
+        table["_player_chains"] / table["_player_touched"].replace(0.0, np.nan)
     ).fillna(0.0)
     table["player_id"] = table["player_id"].astype("int64")
 
     log.info(
-        "shot involvement: %d players over %d groups | mean share %.3f",
+        "shot involvement: %d players over %d groups | mean involvement %.3f, conversion %.3f",
         len(table),
         len(per_group),
         table["shot_involvement"].mean(),
+        table["shot_conversion"].mean(),
     )
     return table[columns].reset_index(drop=True)
 

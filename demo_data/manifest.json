@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-20T08:12:54+00:00",
-  "git_sha": "bde30ef",
+  "generated_at": "2026-08-20T17:38:26+00:00",
+  "git_sha": "09be488",
   "source": "/Volumes/T7/tacticalgraph/corpora/premier_league",
   "corpus": "premier_league",
   "corpus_label": "Premier League 2015/16",
@@ -38,14 +38,14 @@
     },
     "centrality_players.parquet": {
       "rows": 9267,
-      "columns": 24,
-      "size_kb": 1078.8,
+      "columns": 27,
+      "size_kb": 1266.9,
       "source": "networks/centrality_players.parquet"
     },
     "centrality_player_season.parquet": {
       "rows": 419,
-      "columns": 44,
-      "size_kb": 173.6,
+      "columns": 72,
+      "size_kb": 290.9,
       "source": "networks/centrality_player_season.parquet"
     },
     "centrality_teams.parquet": {

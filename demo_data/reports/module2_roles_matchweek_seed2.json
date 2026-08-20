@@ -13,8 +13,8 @@
       "epochs_run": 27,
       "resources": {
         "name": "gnn-position",
-        "seconds": 5.67,
-        "peak_rss_mb": 1455.6,
+        "seconds": 5.65,
+        "peak_rss_mb": 1294.0,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -28,8 +28,8 @@
       "epochs_run": 31,
       "resources": {
         "name": "gnn-topology",
-        "seconds": 6.52,
-        "peak_rss_mb": 1056.0,
+        "seconds": 6.42,
+        "peak_rss_mb": 1310.1,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -43,8 +43,8 @@
       "epochs_run": 26,
       "resources": {
         "name": "gnn-both",
-        "seconds": 5.48,
-        "peak_rss_mb": 785.4,
+        "seconds": 5.59,
+        "peak_rss_mb": 1307.4,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -58,8 +58,8 @@
       "epochs_run": 20,
       "resources": {
         "name": "gnn-direction",
-        "seconds": 4.12,
-        "peak_rss_mb": 777.8,
+        "seconds": 4.1,
+        "peak_rss_mb": 1308.9,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -73,8 +73,8 @@
       "epochs_run": 33,
       "resources": {
         "name": "gnn-topology+direction",
-        "seconds": 6.85,
-        "peak_rss_mb": 813.5,
+        "seconds": 6.88,
+        "peak_rss_mb": 1303.3,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -88,8 +88,8 @@
       "epochs_run": 18,
       "resources": {
         "name": "gnn-all",
-        "seconds": 3.82,
-        "peak_rss_mb": 822.5,
+        "seconds": 3.8,
+        "peak_rss_mb": 1313.2,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -103,8 +103,8 @@
       "epochs_run": 38,
       "resources": {
         "name": "gnn-threat",
-        "seconds": 7.9,
-        "peak_rss_mb": 841.9,
+        "seconds": 7.82,
+        "peak_rss_mb": 1296.0,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -118,8 +118,23 @@
       "epochs_run": 37,
       "resources": {
         "name": "gnn-all+threat",
-        "seconds": 9.54,
-        "peak_rss_mb": 233.3,
+        "seconds": 8.0,
+        "peak_rss_mb": 1240.2,
+        "gpu_peak_mb": 0.0,
+        "device": "mps (Apple Silicon)"
+      }
+    },
+    {
+      "feature_set": "all+threat+conv",
+      "n_features": 23,
+      "train_acc": 0.9066,
+      "val_acc": 0.8795,
+      "test_acc": 0.8774,
+      "epochs_run": 38,
+      "resources": {
+        "name": "gnn-all+threat+conv",
+        "seconds": 8.14,
+        "peak_rss_mb": 1253.6,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -231,6 +246,31 @@
       "shot_involvement",
       "xt_strength_in_norm",
       "xt_strength_out_norm"
+    ],
+    "all+threat+conv": [
+      "mean_x",
+      "mean_y",
+      "spread_x",
+      "spread_y",
+      "touches",
+      "passes_attempted",
+      "passes_completed",
+      "pass_completion_rate",
+      "degree_in_norm",
+      "degree_out_norm",
+      "strength_in_norm",
+      "strength_out_norm",
+      "edge_share_in",
+      "edge_share_out",
+      "progression_made",
+      "progression_received",
+      "pass_length_made",
+      "progressive_share",
+      "xt_generated",
+      "shot_involvement",
+      "xt_strength_in_norm",
+      "xt_strength_out_norm",
+      "shot_conversion"
     ]
   },
   "clustering": [
@@ -260,6 +300,15 @@
       "silhouette": 0.4023,
       "ari_fine24": 0.1451,
       "nmi_fine24": 0.4004
+    },
+    {
+      "representation": "gnn-all+threat+conv",
+      "k": 4,
+      "ari_coarse4": 0.3768,
+      "nmi_coarse4": 0.4971,
+      "silhouette": 0.4052,
+      "ari_fine24": 0.1299,
+      "nmi_fine24": 0.3718
     },
     {
       "representation": "gnn-both",
@@ -343,6 +392,15 @@
       "nmi_fine24": 0.4723
     },
     {
+      "representation": "gnn-all+threat+conv",
+      "k": 6,
+      "ari_coarse4": 0.5902,
+      "nmi_coarse4": 0.6088,
+      "silhouette": 0.2596,
+      "ari_fine24": 0.2579,
+      "nmi_fine24": 0.4754
+    },
+    {
       "representation": "gnn-both",
       "k": 6,
       "ari_coarse4": 0.466,
@@ -422,6 +480,15 @@
       "silhouette": 0.2783,
       "ari_fine24": 0.3409,
       "nmi_fine24": 0.5069
+    },
+    {
+      "representation": "gnn-all+threat+conv",
+      "k": 8,
+      "ari_coarse4": 0.3783,
+      "nmi_coarse4": 0.538,
+      "silhouette": 0.256,
+      "ari_fine24": 0.3487,
+      "nmi_fine24": 0.5074
     },
     {
       "representation": "gnn-both",
@@ -505,6 +572,15 @@
       "nmi_fine24": 0.5108
     },
     {
+      "representation": "gnn-all+threat+conv",
+      "k": 10,
+      "ari_coarse4": 0.3343,
+      "nmi_coarse4": 0.5094,
+      "silhouette": 0.2479,
+      "ari_fine24": 0.3426,
+      "nmi_fine24": 0.4889
+    },
+    {
       "representation": "gnn-both",
       "k": 10,
       "ari_coarse4": 0.3265,
@@ -584,6 +660,15 @@
       "silhouette": 0.2388,
       "ari_fine24": 0.3698,
       "nmi_fine24": 0.5012
+    },
+    {
+      "representation": "gnn-all+threat+conv",
+      "k": 12,
+      "ari_coarse4": 0.3129,
+      "nmi_coarse4": 0.4937,
+      "silhouette": 0.2494,
+      "ari_fine24": 0.3506,
+      "nmi_fine24": 0.4814
     },
     {
       "representation": "gnn-both",
@@ -703,6 +788,13 @@
       "same_player_cosine": 0.7248,
       "diff_player_cosine": 0.0366,
       "lift": 0.6881
+    },
+    {
+      "representation": "gnn-all+threat+conv",
+      "n_players": 400,
+      "same_player_cosine": 0.7073,
+      "diff_player_cosine": 0.0341,
+      "lift": 0.6732
     }
   ],
   "stability_kind": "half_season",
@@ -769,62 +861,76 @@
       "matched_cosine": 0.918,
       "shuffled_cosine": 0.0786,
       "lift": 0.8394
+    },
+    {
+      "representation": "gnn-all+threat+conv",
+      "n_players": 383,
+      "matched_cosine": 0.9032,
+      "shuffled_cosine": 0.073,
+      "lift": 0.8302
     }
   ],
   "resources": [
     {
       "name": "gnn-position",
-      "seconds": 5.67,
-      "peak_rss_mb": 1455.6,
+      "seconds": 5.65,
+      "peak_rss_mb": 1294.0,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-topology",
-      "seconds": 6.52,
-      "peak_rss_mb": 1056.0,
+      "seconds": 6.42,
+      "peak_rss_mb": 1310.1,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-both",
-      "seconds": 5.48,
-      "peak_rss_mb": 785.4,
+      "seconds": 5.59,
+      "peak_rss_mb": 1307.4,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-direction",
-      "seconds": 4.12,
-      "peak_rss_mb": 777.8,
+      "seconds": 4.1,
+      "peak_rss_mb": 1308.9,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-topology+direction",
-      "seconds": 6.85,
-      "peak_rss_mb": 813.5,
+      "seconds": 6.88,
+      "peak_rss_mb": 1303.3,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-all",
-      "seconds": 3.82,
-      "peak_rss_mb": 822.5,
+      "seconds": 3.8,
+      "peak_rss_mb": 1313.2,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-threat",
-      "seconds": 7.9,
-      "peak_rss_mb": 841.9,
+      "seconds": 7.82,
+      "peak_rss_mb": 1296.0,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-all+threat",
-      "seconds": 9.54,
-      "peak_rss_mb": 233.3,
+      "seconds": 8.0,
+      "peak_rss_mb": 1240.2,
+      "gpu_peak_mb": 0.0,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "gnn-all+threat+conv",
+      "seconds": 8.14,
+      "peak_rss_mb": 1253.6,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     }

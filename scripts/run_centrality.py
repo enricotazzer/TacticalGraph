@@ -37,6 +37,7 @@ from tacticalgraph.features.centrality import (  # noqa: E402
     PLAYER_METRICS,
     aggregate_player_season,
     centrality_table,
+    residualise_against_position,
     role_relative_metrics,
 )
 from tacticalgraph.features.chains import shot_chain_involvement  # noqa: E402
@@ -57,7 +58,11 @@ PLAYER_KEYS = NETWORK_KEYS + ["player_id"]
 WEIGHTED_METRICS: tuple[str, ...] = tuple(
     m for m in PLAYER_METRICS if not m.startswith("degree_")
 )
-THREAT_METRICS: tuple[str, ...] = ("xt_generated", "shot_involvement")
+THREAT_METRICS: tuple[str, ...] = ("xt_generated", "shot_involvement", "shot_conversion")
+
+# Mean pitch position, carried through to the season table so `residualise_against_position` can
+# ask how much of each metric is just "where does this player stand".
+POSITION_COLUMNS: tuple[str, ...] = ("mean_x", "mean_y")
 
 
 def networks_from_frames(nodes: pd.DataFrame, edges: pd.DataFrame) -> list[TeamNetwork]:
@@ -173,6 +178,10 @@ def main() -> int:
     ).merge(shot_chain_involvement(actions), on=PLAYER_KEYS, how="left")
     players[list(THREAT_METRICS)] = players[list(THREAT_METRICS)].fillna(0.0)
 
+    players = players.merge(
+        nodes[PLAYER_KEYS + list(POSITION_COLUMNS)], on=PLAYER_KEYS, how="left"
+    )
+
     players.to_parquet(paths.networks / "centrality_players.parquet", index=False)
     teams.to_parquet(paths.networks / "centrality_teams.parquet", index=False)
     log.info("wrote %d player-match rows, %d team-match rows", len(players), len(teams))
@@ -181,6 +190,7 @@ def main() -> int:
         list(PLAYER_METRICS)
         + [f"{m}_xt" for m in WEIGHTED_METRICS]
         + list(THREAT_METRICS)
+        + list(POSITION_COLUMNS)
     )
     season_level = aggregate_player_season(
         players, min_matches=args.min_matches, metrics=tuple(all_metrics)
@@ -195,6 +205,10 @@ def main() -> int:
     # list of midfielders. The z-scores are what make the leaderboard in the app rankable for
     # goalkeepers and forwards at all -- see the caveat in the report below.
     named = role_relative_metrics(named, metrics=tuple(all_metrics))
+    # How much of each metric is position and nothing else? A quadratic fit, because pass volume
+    # peaks in midfield and falls off toward both goals -- a linear one would leave that inverted
+    # U in the residual and understate exactly what this is measuring.
+    named, r2 = residualise_against_position(named, metrics=tuple(all_metrics))
     named.to_parquet(paths.networks / "centrality_player_season.parquet", index=False)
 
     print()
@@ -221,7 +235,7 @@ def main() -> int:
             .to_string(index=False)
         )
 
-    report = volume_proxy_report(named, args)
+    report = volume_proxy_report(named, args, r2)
     print_volume_proxy_report(report, paths)
     out = paths.reports / f"module2_volume_proxy_{args.split}.json"
     out.write_text(json.dumps(report, indent=2))
@@ -249,7 +263,9 @@ def main() -> int:
     return 0
 
 
-def volume_proxy_report(named: pd.DataFrame, args: argparse.Namespace) -> dict:
+def volume_proxy_report(
+    named: pd.DataFrame, args: argparse.Namespace, r2: pd.DataFrame
+) -> dict:
     """Score the three candidate fixes against the published volume-proxy baseline."""
     cohort = named[named["n_matches"] >= args.composition_min_matches]
     cohort = cohort[cohort["coarse_role"].notna()]
@@ -278,6 +294,18 @@ def volume_proxy_report(named: pd.DataFrame, args: argparse.Namespace) -> dict:
                 )
     for metric in THREAT_METRICS:
         composition[metric] = top_role_composition(cohort, metric, args.composition_top)
+        if f"{metric}_r" in cohort.columns:
+            composition[f"{metric}_r"] = top_role_composition(
+                cohort, f"{metric}_r", args.composition_top
+            )
+    for metric in headline:
+        if f"{metric}_r" in cohort.columns:
+            composition[f"{metric}_r"] = top_role_composition(
+                cohort, f"{metric}_r", args.composition_top
+            )
+    position_r2 = (
+        r2.groupby("metric")["r2"].mean().round(4).to_dict() if not r2.empty else {}
+    )
 
     return {
         "corpus": args.corpus,
@@ -291,6 +319,11 @@ def volume_proxy_report(named: pd.DataFrame, args: argparse.Namespace) -> dict:
             name: round(mean_pairwise_spearman(cohort, metrics), 4)
             for name, metrics in families.items()
         },
+        "position_r2": position_r2,
+        "shot_conversion_vs_degree_total": round(
+            float(cohort[["shot_conversion", "degree_total"]].corr(method="spearman").iloc[0, 1]),
+            4,
+        ),
         "shot_involvement_vs_degree_total": round(
             float(cohort[["shot_involvement", "degree_total"]].corr(method="spearman").iloc[0, 1]),
             4,
@@ -324,8 +357,18 @@ def print_volume_proxy_report(report: dict, paths: Paths) -> None:
     print(
         "Spearman vs degree_total -- is the new metric a third volume proxy?\n"
         f"  shot_involvement  {report['shot_involvement_vs_degree_total']:+.4f}\n"
+        f"  shot_conversion   {report['shot_conversion_vs_degree_total']:+.4f}\n"
         f"  xt_generated      {report['xt_generated_vs_degree_total']:+.4f}"
     )
+    if report["position_r2"]:
+        print()
+        print("Share of each metric explained by mean pitch position alone (quadratic fit):")
+        for metric, value in sorted(
+            report["position_r2"].items(), key=lambda kv: -kv[1]
+        ):
+            if metric in POSITION_COLUMNS:
+                continue
+            print(f"  {metric:20s} R2 = {value:.3f}")
     print()
     print(
         "Read the *_z rows with care: z-scoring within role forces the top-N mix toward the\n"

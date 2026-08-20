@@ -95,6 +95,13 @@ THREAT_FEATURES: tuple[str, ...] = (
     "xt_strength_out_norm",
 )
 
+# `shot_involvement` divides by the team's shot count, which is constant within a team-match and
+# therefore never normalises away the player's own touch frequency -- it correlates +0.71 with
+# `degree_total`. `shot_conversion` conditions on the player's own involvement instead and drops
+# that to +0.04. Added as a fifth feature in its own set rather than folded into THREAT_FEATURES,
+# so the published `all+threat` number stays reproducible against the four it was measured on.
+CONVERSION_FEATURES: tuple[str, ...] = ("shot_conversion",)
+
 FEATURE_SETS: dict[str, tuple[str, ...]] = {
     "position": POSITION_FEATURES,
     "topology": TOPOLOGY_FEATURES,
@@ -107,6 +114,13 @@ FEATURE_SETS: dict[str, tuple[str, ...]] = {
     "threat": THREAT_FEATURES,
     "all+threat": (
         POSITION_FEATURES + TOPOLOGY_FEATURES + DIRECTION_FEATURES + THREAT_FEATURES
+    ),
+    "all+threat+conv": (
+        POSITION_FEATURES
+        + TOPOLOGY_FEATURES
+        + DIRECTION_FEATURES
+        + THREAT_FEATURES
+        + CONVERSION_FEATURES
     ),
 }
 
@@ -346,7 +360,11 @@ def _attach_threat_features(
         frame["xt_strength_in_norm"] = _safe_ratio(frame["xt_strength_in"], frame["team_xt_in"])
 
     if node_threat is not None:
-        wanted = [c for c in ("xt_generated", "shot_involvement") if c in node_threat.columns]
+        wanted = [
+            c
+            for c in ("xt_generated", "shot_involvement", "shot_conversion")
+            if c in node_threat.columns
+        ]
         missing_keys = [k for k in keys + ["player_id"] if k not in node_threat.columns]
         if missing_keys:
             raise KeyError(
