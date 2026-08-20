@@ -78,6 +78,23 @@ DIRECTION_FEATURES: tuple[str, ...] = (
     "progressive_share",
 )
 
+# Who moves the ball somewhere dangerous, and who is there when the shot arrives. Volume and
+# direction both describe a player's *passing*; these two describe what the passing was worth.
+# `xt_generated` and `shot_involvement` come from the actions (see `features/xthreat.py` and
+# `features/chains.py`); `xt_strength_*_norm` come from the edge table once its weights are xT
+# sums rather than pass counts. Together they are the last of the three candidate fixes listed
+# against the volume-proxy limitation in docs/DATA_SOURCES.md.
+#
+# `xt_generated` and the two `xt_strength_*` features are fitted quantities: xT is learned from
+# data and MUST come from a surface fitted on the training fold only. `shot_involvement` is not
+# -- it counts observed possessions and has no fitting step at all.
+THREAT_FEATURES: tuple[str, ...] = (
+    "xt_generated",
+    "shot_involvement",
+    "xt_strength_in_norm",
+    "xt_strength_out_norm",
+)
+
 FEATURE_SETS: dict[str, tuple[str, ...]] = {
     "position": POSITION_FEATURES,
     "topology": TOPOLOGY_FEATURES,
@@ -87,6 +104,10 @@ FEATURE_SETS: dict[str, tuple[str, ...]] = {
     "direction": DIRECTION_FEATURES,
     "topology+direction": TOPOLOGY_FEATURES + DIRECTION_FEATURES,
     "all": POSITION_FEATURES + TOPOLOGY_FEATURES + DIRECTION_FEATURES,
+    "threat": THREAT_FEATURES,
+    "all+threat": (
+        POSITION_FEATURES + TOPOLOGY_FEATURES + DIRECTION_FEATURES + THREAT_FEATURES
+    ),
 }
 
 
@@ -142,6 +163,7 @@ def engineer_node_features(
     nodes: pd.DataFrame,
     edges: pd.DataFrame,
     group_keys: tuple[str, ...] = NETWORK_KEYS,
+    node_threat: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Derive the topology features from the persisted node/edge tables.
 
@@ -161,6 +183,15 @@ def engineer_node_features(
     `window_index` column, because the full-match tables *do* carry that column (entirely null),
     so any auto-detection would have to guess and would fail silently in one direction or the
     other.
+
+    `node_threat` carries the per-player quantities that cannot be derived from the network
+    tables alone -- `xt_generated` and `shot_involvement`, both keyed on `group_keys +
+    ["player_id"]`. Pass None (the default) and THREAT_FEATURES are simply absent from the
+    result; requesting a feature set that needs them then fails on the missing column, which is
+    the intended behaviour. Filling them with zeros instead would hand `build_graphs` a
+    plausible-looking constant column and produce an ablation row that measures nothing.
+    The same applies to `xt_strength_*_norm`, which appear only when `edges` carries an
+    `xt_weight` column.
     """
     keys = list(group_keys)
     missing = [k for k in keys if k not in nodes.columns or k not in edges.columns]
@@ -229,12 +260,12 @@ def engineer_node_features(
     # training fold, so absolute scale is handled, but any provider difference in how pass end
     # points are annotated will show up here as a distribution shift rather than being normalised
     # away. `progressive_share` is a share and is the provider-robust member of the group.
-    direction_defaults = dict.fromkeys(DIRECTION_FEATURES, 0.0)
     if edges.empty:
         # A team with no completed passes in the window. Zero is the honest reading of "no
         # evidence of direction", and matches how the volume features treat the same case.
-        frame = frame.assign(**direction_defaults)
-        return frame
+        return _attach_threat_features(
+            frame.assign(**dict.fromkeys(DIRECTION_FEATURES, 0.0)), edges, keys, node_threat
+        )
 
     weighted = edges[keys + ["source", "target", "weight"]].copy()
     weighted["_w_dx"] = edges["weight"] * edges["mean_dx"]
@@ -269,6 +300,71 @@ def engineer_node_features(
     )
     # A player who received but never made a pass (or vice versa) has no row on one side.
     frame[list(DIRECTION_FEATURES)] = frame[list(DIRECTION_FEATURES)].fillna(0.0)
+
+    return _attach_threat_features(frame, edges, keys, node_threat)
+
+
+def _attach_threat_features(
+    frame: pd.DataFrame,
+    edges: pd.DataFrame,
+    keys: list[str],
+    node_threat: pd.DataFrame | None,
+) -> pd.DataFrame:
+    """Add whichever of THREAT_FEATURES the inputs actually support, and no more.
+
+    Deliberately silent when an input is absent: the caller gets a frame without those columns
+    rather than a frame full of zeros. `build_graphs` then raises on the missing column, which is
+    the loud failure this project prefers to a silently useless feature.
+    """
+    def _safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+        return (numerator / denominator.replace(0.0, np.nan)).fillna(0.0)
+
+    if "xt_weight" in edges.columns and not edges.empty:
+        out_xt = (
+            edges.groupby(keys + ["source"])["xt_weight"].sum()
+            .rename("xt_strength_out").reset_index().rename(columns={"source": "player_id"})
+        )
+        in_xt = (
+            edges.groupby(keys + ["target"])["xt_weight"].sum()
+            .rename("xt_strength_in").reset_index().rename(columns={"target": "player_id"})
+        )
+        frame = frame.merge(out_xt, on=keys + ["player_id"], how="left").merge(
+            in_xt, on=keys + ["player_id"], how="left"
+        )
+        for column in ("xt_strength_out", "xt_strength_in"):
+            frame[column] = frame[column].fillna(0.0)
+
+        # A share of the team's xT-weighted strength, for the same reason every volume feature is
+        # a share: raw xT sums carry the provider's action-density signature and the match's
+        # overall danger, neither of which is a property of the player.
+        totals = frame.groupby(keys).agg(
+            team_xt_out=("xt_strength_out", "sum"),
+            team_xt_in=("xt_strength_in", "sum"),
+        ).reset_index()
+        frame = frame.merge(totals, on=keys, how="left")
+        frame["xt_strength_out_norm"] = _safe_ratio(frame["xt_strength_out"], frame["team_xt_out"])
+        frame["xt_strength_in_norm"] = _safe_ratio(frame["xt_strength_in"], frame["team_xt_in"])
+
+    if node_threat is not None:
+        wanted = [c for c in ("xt_generated", "shot_involvement") if c in node_threat.columns]
+        missing_keys = [k for k in keys + ["player_id"] if k not in node_threat.columns]
+        if missing_keys:
+            raise KeyError(
+                f"node_threat is missing join keys {missing_keys}; it must be keyed the same way "
+                "as the node table, or the merge silently drops every row"
+            )
+        before = len(frame)
+        frame = frame.merge(
+            node_threat[keys + ["player_id"] + wanted], on=keys + ["player_id"], how="left"
+        )
+        if len(frame) != before:
+            raise ValueError(
+                f"node_threat join changed the row count ({before} -> {len(frame)}); it has "
+                "duplicate rows for some (network, player)"
+            )
+        # A player with no qualifying action generated no threat and appeared in no shot chain.
+        # Here zero IS the measurement, unlike the absent-input case handled above.
+        frame[wanted] = frame[wanted].fillna(0.0)
 
     return frame
 

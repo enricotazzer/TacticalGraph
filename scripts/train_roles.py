@@ -30,7 +30,7 @@ from tacticalgraph.data.enrichment import load_enrichment  # noqa: E402
 from tacticalgraph.data.players import load_player_directory  # noqa: E402
 from tacticalgraph.data.roles import ROLE_TO_INDEX  # noqa: E402
 from tacticalgraph.data.schema import assert_no_enrichment_leakage  # noqa: E402
-from tacticalgraph.data.spadl_store import read_games  # noqa: E402
+from tacticalgraph.data.spadl_store import read_actions, read_games  # noqa: E402
 from tacticalgraph.eval.clustering import (  # noqa: E402
     cluster_and_score,
     compare_representations,
@@ -45,6 +45,12 @@ from tacticalgraph.eval.splits import (  # noqa: E402
     temporal_split,
 )
 from tacticalgraph.features.centrality import PLAYER_METRICS  # noqa: E402
+from tacticalgraph.features.chains import shot_chain_involvement  # noqa: E402
+from tacticalgraph.features.xthreat import (  # noqa: E402
+    attach_xt_edge_weights,
+    fit_xthreat,
+    player_threat,
+)
 from tacticalgraph.models.role_gnn import (  # noqa: E402
     FEATURE_SETS,
     build_graphs,
@@ -58,11 +64,43 @@ from tacticalgraph.models.role_gnn import (  # noqa: E402
 log = logging.getLogger("train_roles")
 
 
-def load_features(paths: Paths) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Node features with role labels attached, plus the edge table."""
+def load_tables(paths: Paths) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """The persisted full-match node and edge tables, untouched.
+
+    Separate from `build_features` because the threat features depend on an xThreat surface
+    fitted on the training fold, so the split has to be known before anything is engineered.
+    """
     nodes = pd.read_parquet(paths.networks / "full_nodes.parquet")
     edges = pd.read_parquet(paths.networks / "full_edges.parquet")
-    features = engineer_node_features(nodes, edges)
+    return nodes, edges
+
+
+def build_node_threat(actions: pd.DataFrame, xt_values: pd.Series) -> pd.DataFrame:
+    """Per-player `xt_generated` and `shot_involvement`, joined on the network keys.
+
+    Two features with different provenance deliberately kept in one frame, because they answer
+    the same question -- was this player's involvement *worth* anything -- from the two sides
+    the event data can see: threat they created by moving the ball, and presence in possessions
+    that ended in a shot. Only the first is fitted; see `features/chains.shot_chain_involvement`.
+    """
+    threat = player_threat(actions, xt_values)
+    involvement = shot_chain_involvement(actions)
+    keys = ["game_id", "team_id", "season", "provider", "player_id"]
+    merged = threat.merge(involvement, on=keys, how="outer")
+    merged[["xt_generated", "shot_involvement"]] = merged[
+        ["xt_generated", "shot_involvement"]
+    ].fillna(0.0)
+    return merged
+
+
+def build_features(
+    paths: Paths,
+    nodes: pd.DataFrame,
+    edges: pd.DataFrame,
+    node_threat: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Node features with role labels attached."""
+    features = engineer_node_features(nodes, edges, node_threat=node_threat)
 
     directory = load_player_directory(paths)
     features = features.merge(
@@ -89,7 +127,7 @@ def load_features(paths: Paths) -> tuple[pd.DataFrame, pd.DataFrame]:
         features.groupby(["game_id", "team_id"]).ngroups,
         features["coarse_role"].value_counts().to_dict(),
     )
-    return features, edges
+    return features
 
 
 def run_ablation(
@@ -182,9 +220,21 @@ def main() -> int:
     paths = Paths.load(args.corpus).ensure()
     log.info("device: %s (requested %s)", device_label(), args.device)
 
-    features, edges = load_features(paths)
+    nodes, edges = load_tables(paths)
     games = read_games(paths)
     split = temporal_split(games, kind=args.split, corpus=args.corpus)
+
+    # Everything below the split is fitted, so it has to happen after it. xThreat is learned
+    # from data -- fitting the surface on the whole corpus would let the test fold shape the
+    # features used to predict it, which is the rule `features/xthreat.py` exists to centralise.
+    actions = read_actions(paths)
+    with ResourceMonitor("threat-features") as threat_monitor:
+        xt = fit_xthreat(actions, split.train)
+        edges = attach_xt_edge_weights(edges, actions, xt)
+        node_threat = build_node_threat(actions, xt)
+    log.info("threat features: %s", threat_monitor.summary())
+
+    features = build_features(paths, nodes, edges, node_threat=node_threat)
 
     features["fold"] = split.assign(features["game_id"])
     # Prove no match straddles two folds. With ~13 rows per match, a random split would be

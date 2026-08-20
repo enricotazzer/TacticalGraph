@@ -13,8 +13,8 @@
       "epochs_run": 24,
       "resources": {
         "name": "gnn-position",
-        "seconds": 4.98,
-        "peak_rss_mb": 588.1,
+        "seconds": 5.14,
+        "peak_rss_mb": 1467.6,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -28,8 +28,8 @@
       "epochs_run": 28,
       "resources": {
         "name": "gnn-topology",
-        "seconds": 5.77,
-        "peak_rss_mb": 609.0,
+        "seconds": 6.18,
+        "peak_rss_mb": 1480.9,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -43,8 +43,8 @@
       "epochs_run": 42,
       "resources": {
         "name": "gnn-both",
-        "seconds": 8.84,
-        "peak_rss_mb": 619.7,
+        "seconds": 9.12,
+        "peak_rss_mb": 1490.0,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -58,8 +58,8 @@
       "epochs_run": 21,
       "resources": {
         "name": "gnn-direction",
-        "seconds": 4.36,
-        "peak_rss_mb": 629.0,
+        "seconds": 4.46,
+        "peak_rss_mb": 1494.3,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -73,8 +73,8 @@
       "epochs_run": 26,
       "resources": {
         "name": "gnn-topology+direction",
-        "seconds": 5.74,
-        "peak_rss_mb": 641.2,
+        "seconds": 5.69,
+        "peak_rss_mb": 1496.4,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -88,8 +88,38 @@
       "epochs_run": 21,
       "resources": {
         "name": "gnn-all",
-        "seconds": 4.56,
-        "peak_rss_mb": 643.6,
+        "seconds": 4.61,
+        "peak_rss_mb": 1510.7,
+        "gpu_peak_mb": 0.0,
+        "device": "mps (Apple Silicon)"
+      }
+    },
+    {
+      "feature_set": "threat",
+      "n_features": 4,
+      "train_acc": 0.6587,
+      "val_acc": 0.6456,
+      "test_acc": 0.6153,
+      "epochs_run": 45,
+      "resources": {
+        "name": "gnn-threat",
+        "seconds": 9.66,
+        "peak_rss_mb": 1460.7,
+        "gpu_peak_mb": 0.0,
+        "device": "mps (Apple Silicon)"
+      }
+    },
+    {
+      "feature_set": "all+threat",
+      "n_features": 22,
+      "train_acc": 0.907,
+      "val_acc": 0.886,
+      "test_acc": 0.8791,
+      "epochs_run": 42,
+      "resources": {
+        "name": "gnn-all+threat",
+        "seconds": 9.29,
+        "peak_rss_mb": 1411.5,
         "gpu_peak_mb": 0.0,
         "device": "mps (Apple Silicon)"
       }
@@ -171,6 +201,36 @@
       "progression_received",
       "pass_length_made",
       "progressive_share"
+    ],
+    "threat": [
+      "xt_generated",
+      "shot_involvement",
+      "xt_strength_in_norm",
+      "xt_strength_out_norm"
+    ],
+    "all+threat": [
+      "mean_x",
+      "mean_y",
+      "spread_x",
+      "spread_y",
+      "touches",
+      "passes_attempted",
+      "passes_completed",
+      "pass_completion_rate",
+      "degree_in_norm",
+      "degree_out_norm",
+      "strength_in_norm",
+      "strength_out_norm",
+      "edge_share_in",
+      "edge_share_out",
+      "progression_made",
+      "progression_received",
+      "pass_length_made",
+      "progressive_share",
+      "xt_generated",
+      "shot_involvement",
+      "xt_strength_in_norm",
+      "xt_strength_out_norm"
     ]
   },
   "clustering": [
@@ -191,6 +251,15 @@
       "silhouette": 0.363,
       "ari_fine24": 0.2089,
       "nmi_fine24": 0.4638
+    },
+    {
+      "representation": "gnn-all+threat",
+      "k": 4,
+      "ari_coarse4": 0.3671,
+      "nmi_coarse4": 0.4953,
+      "silhouette": 0.3634,
+      "ari_fine24": 0.12,
+      "nmi_fine24": 0.3635
     },
     {
       "representation": "gnn-both",
@@ -218,6 +287,15 @@
       "silhouette": 0.3493,
       "ari_fine24": 0.2001,
       "nmi_fine24": 0.4319
+    },
+    {
+      "representation": "gnn-threat",
+      "k": 4,
+      "ari_coarse4": 0.1851,
+      "nmi_coarse4": 0.2911,
+      "silhouette": 0.3101,
+      "ari_fine24": 0.0761,
+      "nmi_fine24": 0.2323
     },
     {
       "representation": "gnn-topology",
@@ -256,6 +334,15 @@
       "nmi_fine24": 0.5258
     },
     {
+      "representation": "gnn-all+threat",
+      "k": 6,
+      "ari_coarse4": 0.4958,
+      "nmi_coarse4": 0.6118,
+      "silhouette": 0.2839,
+      "ari_fine24": 0.3006,
+      "nmi_fine24": 0.5262
+    },
+    {
       "representation": "gnn-both",
       "k": 6,
       "ari_coarse4": 0.3825,
@@ -281,6 +368,15 @@
       "silhouette": 0.3458,
       "ari_fine24": 0.3103,
       "nmi_fine24": 0.5123
+    },
+    {
+      "representation": "gnn-threat",
+      "k": 6,
+      "ari_coarse4": 0.1781,
+      "nmi_coarse4": 0.2736,
+      "silhouette": 0.2513,
+      "ari_fine24": 0.085,
+      "nmi_fine24": 0.2399
     },
     {
       "representation": "gnn-topology",
@@ -319,6 +415,15 @@
       "nmi_fine24": 0.5174
     },
     {
+      "representation": "gnn-all+threat",
+      "k": 8,
+      "ari_coarse4": 0.3974,
+      "nmi_coarse4": 0.5605,
+      "silhouette": 0.2636,
+      "ari_fine24": 0.3281,
+      "nmi_fine24": 0.5315
+    },
+    {
       "representation": "gnn-both",
       "k": 8,
       "ari_coarse4": 0.3792,
@@ -344,6 +449,15 @@
       "silhouette": 0.3589,
       "ari_fine24": 0.3677,
       "nmi_fine24": 0.5764
+    },
+    {
+      "representation": "gnn-threat",
+      "k": 8,
+      "ari_coarse4": 0.1485,
+      "nmi_coarse4": 0.2601,
+      "silhouette": 0.2063,
+      "ari_fine24": 0.0904,
+      "nmi_fine24": 0.2341
     },
     {
       "representation": "gnn-topology",
@@ -382,6 +496,15 @@
       "nmi_fine24": 0.5239
     },
     {
+      "representation": "gnn-all+threat",
+      "k": 10,
+      "ari_coarse4": 0.3136,
+      "nmi_coarse4": 0.517,
+      "silhouette": 0.2298,
+      "ari_fine24": 0.3563,
+      "nmi_fine24": 0.5084
+    },
+    {
       "representation": "gnn-both",
       "k": 10,
       "ari_coarse4": 0.3159,
@@ -407,6 +530,15 @@
       "silhouette": 0.3629,
       "ari_fine24": 0.412,
       "nmi_fine24": 0.5724
+    },
+    {
+      "representation": "gnn-threat",
+      "k": 10,
+      "ari_coarse4": 0.1266,
+      "nmi_coarse4": 0.2395,
+      "silhouette": 0.2097,
+      "ari_fine24": 0.0901,
+      "nmi_fine24": 0.2208
     },
     {
       "representation": "gnn-topology",
@@ -445,6 +577,15 @@
       "nmi_fine24": 0.4992
     },
     {
+      "representation": "gnn-all+threat",
+      "k": 12,
+      "ari_coarse4": 0.2704,
+      "nmi_coarse4": 0.4956,
+      "silhouette": 0.2251,
+      "ari_fine24": 0.403,
+      "nmi_fine24": 0.5331
+    },
+    {
       "representation": "gnn-both",
       "k": 12,
       "ari_coarse4": 0.2764,
@@ -470,6 +611,15 @@
       "silhouette": 0.3347,
       "ari_fine24": 0.453,
       "nmi_fine24": 0.5673
+    },
+    {
+      "representation": "gnn-threat",
+      "k": 12,
+      "ari_coarse4": 0.1151,
+      "nmi_coarse4": 0.2312,
+      "silhouette": 0.2065,
+      "ari_fine24": 0.0855,
+      "nmi_fine24": 0.2217
     },
     {
       "representation": "gnn-topology",
@@ -539,6 +689,20 @@
       "same_player_cosine": 0.7348,
       "diff_player_cosine": 0.0338,
       "lift": 0.7011
+    },
+    {
+      "representation": "gnn-threat",
+      "n_players": 400,
+      "same_player_cosine": 0.4222,
+      "diff_player_cosine": 0.0491,
+      "lift": 0.3731
+    },
+    {
+      "representation": "gnn-all+threat",
+      "n_players": 400,
+      "same_player_cosine": 0.695,
+      "diff_player_cosine": 0.0243,
+      "lift": 0.6707
     }
   ],
   "stability_kind": "half_season",
@@ -591,48 +755,76 @@
       "matched_cosine": 0.9129,
       "shuffled_cosine": 0.0875,
       "lift": 0.8254
+    },
+    {
+      "representation": "gnn-threat",
+      "n_players": 383,
+      "matched_cosine": 0.7663,
+      "shuffled_cosine": 0.0678,
+      "lift": 0.6985
+    },
+    {
+      "representation": "gnn-all+threat",
+      "n_players": 383,
+      "matched_cosine": 0.9017,
+      "shuffled_cosine": 0.0732,
+      "lift": 0.8285
     }
   ],
   "resources": [
     {
       "name": "gnn-position",
-      "seconds": 4.98,
-      "peak_rss_mb": 588.1,
+      "seconds": 5.14,
+      "peak_rss_mb": 1467.6,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-topology",
-      "seconds": 5.77,
-      "peak_rss_mb": 609.0,
+      "seconds": 6.18,
+      "peak_rss_mb": 1480.9,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-both",
-      "seconds": 8.84,
-      "peak_rss_mb": 619.7,
+      "seconds": 9.12,
+      "peak_rss_mb": 1490.0,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-direction",
-      "seconds": 4.36,
-      "peak_rss_mb": 629.0,
+      "seconds": 4.46,
+      "peak_rss_mb": 1494.3,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-topology+direction",
-      "seconds": 5.74,
-      "peak_rss_mb": 641.2,
+      "seconds": 5.69,
+      "peak_rss_mb": 1496.4,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     },
     {
       "name": "gnn-all",
-      "seconds": 4.56,
-      "peak_rss_mb": 643.6,
+      "seconds": 4.61,
+      "peak_rss_mb": 1510.7,
+      "gpu_peak_mb": 0.0,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "gnn-threat",
+      "seconds": 9.66,
+      "peak_rss_mb": 1460.7,
+      "gpu_peak_mb": 0.0,
+      "device": "mps (Apple Silicon)"
+    },
+    {
+      "name": "gnn-all+threat",
+      "seconds": 9.29,
+      "peak_rss_mb": 1411.5,
       "gpu_peak_mb": 0.0,
       "device": "mps (Apple Silicon)"
     }

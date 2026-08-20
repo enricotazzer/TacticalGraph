@@ -1,0 +1,118 @@
+{
+  "corpus": "premier_league",
+  "split": "matchweek",
+  "n_players": 359,
+  "min_matches": 10,
+  "top": 50,
+  "population_share": {
+    "GK": 7.5,
+    "DEF": 35.4,
+    "MID": 31.5,
+    "FWD": 25.6
+  },
+  "top_composition": {
+    "degree_total": {
+      "GK": 0.0,
+      "DEF": 8.0,
+      "MID": 84.0,
+      "FWD": 8.0
+    },
+    "degree_total_z": {
+      "GK": 6.0,
+      "DEF": 34.0,
+      "MID": 32.0,
+      "FWD": 28.0
+    },
+    "pagerank": {
+      "GK": 0.0,
+      "DEF": 10.0,
+      "MID": 76.0,
+      "FWD": 14.0
+    },
+    "pagerank_xt": {
+      "GK": 0.0,
+      "DEF": 0.0,
+      "MID": 10.0,
+      "FWD": 90.0
+    },
+    "pagerank_z": {
+      "GK": 6.0,
+      "DEF": 34.0,
+      "MID": 34.0,
+      "FWD": 26.0
+    },
+    "pagerank_xt_z": {
+      "GK": 6.0,
+      "DEF": 30.0,
+      "MID": 44.0,
+      "FWD": 20.0
+    },
+    "betweenness": {
+      "GK": 0.0,
+      "DEF": 30.0,
+      "MID": 66.0,
+      "FWD": 4.0
+    },
+    "betweenness_xt": {
+      "GK": 0.0,
+      "DEF": 2.0,
+      "MID": 60.0,
+      "FWD": 38.0
+    },
+    "betweenness_z": {
+      "GK": 2.0,
+      "DEF": 34.0,
+      "MID": 42.0,
+      "FWD": 22.0
+    },
+    "betweenness_xt_z": {
+      "GK": 6.0,
+      "DEF": 34.0,
+      "MID": 34.0,
+      "FWD": 26.0
+    },
+    "strength_out": {
+      "GK": 0.0,
+      "DEF": 48.0,
+      "MID": 50.0,
+      "FWD": 2.0
+    },
+    "strength_out_xt": {
+      "GK": 0.0,
+      "DEF": 44.0,
+      "MID": 32.0,
+      "FWD": 24.0
+    },
+    "strength_out_z": {
+      "GK": 6.0,
+      "DEF": 34.0,
+      "MID": 32.0,
+      "FWD": 28.0
+    },
+    "strength_out_xt_z": {
+      "GK": 0.0,
+      "DEF": 46.0,
+      "MID": 24.0,
+      "FWD": 30.0
+    },
+    "xt_generated": {
+      "GK": 0.0,
+      "DEF": 22.0,
+      "MID": 34.0,
+      "FWD": 44.0
+    },
+    "shot_involvement": {
+      "GK": 0.0,
+      "DEF": 14.0,
+      "MID": 48.0,
+      "FWD": 38.0
+    }
+  },
+  "mean_pairwise_spearman": {
+    "volume_all_10": 0.7249,
+    "volume_same_7": 0.7113,
+    "xt_weighted": 0.6513
+  },
+  "shot_involvement_vs_degree_total": 0.7103,
+  "xt_generated_vs_degree_total": 0.4569
+}

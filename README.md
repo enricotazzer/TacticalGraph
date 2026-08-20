@@ -56,7 +56,7 @@ positive ones:
 streamlit run app/Home.py
 ```
 
-Runs from a **~8.5 MB bundle committed to this repo** (`demo_data/`), so it works on a fresh
+Runs from a **~7 MB bundle committed to this repo** (`demo_data/`), so it works on a fresh
 clone with no external drive and no re-ingestion. The bundle is small enough because
 `engineer_node_features()` derives every model input from the network node/edge tables — the
 55 MB action store and 1.4 GB of raw provider JSON are not needed for anything the demo shows.
@@ -83,7 +83,7 @@ of data provider**. Buffon's six nearest neighbours are all goalkeepers.
 To rebuild the bundle after changing the pipeline:
 
 ```bash
-python scripts/export_demo_bundle.py     # writes demo_data/ (~8.5 MB)
+python scripts/export_demo_bundle.py     # writes demo_data/ (~7 MB)
 pytest tests/test_demo_bundle.py         # manifest integrity + checkpoint round-trip
 ```
 
@@ -326,6 +326,35 @@ without position is worse than position alone** on every split, so direction com
 location rather than replacing it. And three of the four features are in **metres**, not shares, so
 unlike the rest of the feature table they carry any provider difference in how pass end points are
 annotated; `progressive_share` is the provider-robust member of the group.
+
+### Threat features: a null, and a clean one
+
+The natural next step was to add what the passing graph still could not see — how much a player's
+passes were *worth*. Four more features: `xt_generated` (share of the team's xThreat created),
+`shot_involvement` (share of the team's shot-ending possessions the player appears in), and the
+in/out strength of edges reweighted by xT instead of pass count. All four are fitted or computed
+**after** the split; the xThreat surface is fitted on the training fold only.
+
+| Corpus / split | `all` − `position` | `all+threat` − `position` | seed σ |
+|---|---|---|---|
+| **Premier League, matchweek (primary)** | +2.65 pp | +2.73 pp | ±0.25–0.34 |
+| Serie A, within-season (control) | +2.53 pp | +2.56 pp | ±0.46–0.65 |
+| Serie A, cross-season (confounded) | +5.74 pp | +5.57 pp | ±1.11–1.56 |
+
+**They add nothing.** The pre-registered bars were "beat +2.65 pp and +2.53 pp"; they are cleared
+by +0.08 pp and +0.03 pp against seed spreads three to twenty times larger, and the confounded
+split moves the other way. `threat` on its own is the **weakest feature set in the project** at
+0.6215, below both `topology` (0.7538) and `direction` (0.7422).
+
+In hindsight this is the result to expect, and it sharpens what Module 2 is actually measuring:
+threat answers *how valuable were this player's actions*, while the 4-class target asks *where do
+they play*. Those turn out to be close to orthogonal. Pass **direction** helped precisely because
+it is geometric — a keeper's +30.3 m and a forward's +13.7 m received are facts about pitch
+location — and pass **value** is not.
+
+The features are kept, because they are what the leaderboard needs even though the classifier does
+not: see [Limitations](#limitations) for what they did to the volume-proxy problem, which is
+the question they were actually built for.
 
 ### Clustering: the actual comparison against the baseline
 
@@ -817,7 +846,8 @@ Everything runs on a laptop; nothing here needs a Kaggle GPU session, which is t
 | Download (760 matches) | ~8 min | — | 1.4 GB raw, resumable |
 | SPADL conversion, both providers | 53 s (Wyscout) + ~4 min (StatsBomb) | — | 0 failures / 760 games |
 | Passing networks (full + windowed) | 128 s | — | 1,520 + 24,320 networks |
-| Centrality baseline | 6.9 s | 419 MB | 19,335 player-match rows |
+| Centrality baseline (volume + xT-weighted) | 6.7 s | 1,548 MB | 19,335 player-match rows, pipeline run twice |
+| xThreat fit + per-edge join | 1.5 s | 1,505 MB | fitted on the 260 train matches only |
 | GNN `position` | 6.6 s | 672 MB | 4 features |
 | GNN `topology` | 11.5 s | 703 MB | 10 features |
 | GNN `both` | 7.8 s | 719 MB | 14 features |
@@ -908,13 +938,18 @@ pytest                                       # 74 tests
   of only 3-4 actions per player, with ~5 of 11 players reaching 5); and a **defensive-phase
   graph is not buildable from events at all**, only team-level scalars such as line height and
   recovery zones. See [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
-- **Pass-only edges make centrality a volume proxy.** Midfielders are 33% of the population and
-  **84% of the top 50 by degree**; forwards and goalkeepers are effectively unrankable (0-14%
-  against a 24% share). The metrics also disagree with each other about who is central
-  (`degree_total` says 84% MID, `strength_out` says 56% DEF), which is itself evidence that none
-  of them measures tactical importance. Candidate fixes — xT-weighted edges, shot-chain
-  involvement, role-relative z-scores — are specified in [`docs/ROADMAP.md`](docs/ROADMAP.md)
-  and **not yet built**.
+- **Pass-only edges make centrality a volume proxy. All three candidate fixes are now built, and
+  they moved the composition without fixing the underlying problem.** Raw `degree_total` still
+  reads **84% MID against a 31% population share**, with goalkeepers at 0%. xT-weighted edges
+  overshoot rather than correct: `pagerank_xt` swings to **90% FWD** (92% on Serie A), trading a
+  midfielder leaderboard for a forward one. Only `strength_out_xt` lands near the population
+  (0/44/32/24 against 7/35/32/26). Two pre-registered targets failed outright — the xT-weighted
+  metrics **agree with each other *less*** than the same seven metrics on pass counts (mean
+  pairwise Spearman 0.65 vs 0.71 on the Premier League, 0.53 vs 0.70 on Serie A), and `shot_involvement` correlates
+  **+0.71** with `degree_total`, i.e. it is substantially a third volume proxy. Role-relative
+  z-scoring does move every metric to roughly the population mix, but that is true by
+  construction. **Reweighting the edges of a pass-only graph does not make it measure tactical
+  importance**; see [Module 2](#module-2--functional-role-gnn-embedding-vs-classical-centrality).
 - **Event data is a partial representation of football.** Off-ball movement, verbal
   communication and tactical intent are not observable here, and no amount of modelling
   recovers them.
@@ -922,18 +957,19 @@ pytest                                       # 74 tests
   short training schedules. These are proof-of-concept results, not state-of-the-art claims.
 - **Three seeds** per configuration. Enough to show the ablation ordering is stable; not
   enough for tight confidence intervals on a ~1 pp effect.
-- **Module 3's negative result was largely an optimiser bug, and two earlier claims in this
-  README were wrong.** It first said the GNN's deficit was caused by too few independent
-  training labels; a measured learning curve refuted that (B0 plateaus by ~280 matches, total
-  headroom ~0.037 log-loss, against a deficit of +0.15 to +0.24). It then said the deficit was
-  robust across 9 runs; fixing `optimiser.step()` — which ran once per match, i.e. batch size 1
-  — cut "significantly worse than B0" from **9 of 9 runs to 1 of 9**. A third claim, that the
-  capacity sweep's preference for the smallest model showed the corpus could not support
-  capacity, also fell: with batching it prefers the largest. **The methodology around the result
-  was sound — temporal splits, per-match bootstrap, a val-only sweep — but none of it protects
-  against a wrong training loop, and the model had no unit tests at all until this was found.**
-  Two specified-but-unbuilt fixes remain in `docs/ROADMAP.md`: checkpoint-weighted loss, and a
-  residual on a *fitted* B1 rather than a parallel linear path.
+- **Module 3's headline conclusion has been rewritten four times, and every revision was caused
+  by a defect in this repository rather than by new data.** In order: too few training labels
+  (refuted by a measured learning curve — B0 plateaus by ~280 matches and total headroom is
+  ~0.037 log-loss against a deficit of +0.15 to +0.24); "robust across 9 runs" (refuted by
+  `optimiser.step()` running once per match, i.e. batch size 1 — fixing it cut "significantly
+  worse than B0" from **9 of 9 runs to 1 of 9**); "the corpus cannot support capacity" (the same
+  bug); and "cannot beat B1 even when handed it" (refuted by **7 of 10 node features being
+  full-match values repeated across all 16 windows**). **The evaluation methodology was sound the
+  whole time — temporal splits, per-match bootstrap, val-only sweeps, `reject_random_split` — and
+  it caught none of them.** Each was found by reading or exercising the code. The two fixes that
+  used to be listed here as unbuilt — checkpoint-weighted loss and a residual on a *fitted* B1 —
+  are both built; the residual is kept as the right experimental design, the checkpoint weighting
+  is kept as a validation-selected option and is **not** an improvement.
 - **The Module 3 running scoreline is 99.7% faithful** (758/760 games). Two Wyscout matches are
   missing a goal from the event stream entirely; no substitute goal was invented.
 - **Module 4's shot-precursor analysis is associational.** A cluster with a 57% shot rate
@@ -988,8 +1024,8 @@ app/
   _shared.py           cached loaders, status banner, forces the Agg backend
   pages/1..6_*.py      one page per macro phase
 scripts/               one entry point per phase, plus export_demo_bundle.py
-demo_data/             ~8.5 MB committed bundle -- the demo's input
-tests/                 43 tests
+demo_data/             ~7 MB committed bundle -- the demo's input
+tests/                 158 tests
 ```
 
 ## References

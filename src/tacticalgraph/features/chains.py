@@ -69,6 +69,27 @@ def zone_of(x: float) -> str:
     return "final"
 
 
+def shot_possessions(actions: pd.DataFrame) -> set[tuple[int, int]]:
+    """The `(game_id, possession_id)` pairs whose possession contains at least one shot.
+
+    Membership is a `type_name` prefix test, not an equality test: SPADL spells the restart
+    variants `shot_penalty` and `shot_freekick` alongside the plain `shot`, and matching on
+    equality would quietly drop every penalty and direct free kick from the target.
+
+    The pairs are cast to `(int, int)` rather than left as whatever `to_numpy()` produced, so
+    that the key type is fixed by this function instead of by the caller's column dtypes. Every
+    call site looks membership up as `(int(g), int(p))`; leaving the set keyed on a float or
+    object array would make those lookups depend on Python's cross-type equality happening to
+    hold, which is correct today and silently is not the moment a column arrives as a nullable
+    or string dtype.
+    """
+    if actions.empty:
+        return set()
+    is_shot = actions["type_name"].str.startswith("shot")
+    pairs = actions.loc[is_shot, ["game_id", "possession_id"]].to_numpy()
+    return {(int(game_id), int(possession_id)) for game_id, possession_id in pairs}
+
+
 def build_chain_table(
     actions: pd.DataFrame,
     xt_values: pd.Series | None = None,
@@ -86,14 +107,11 @@ def build_chain_table(
         frame["xt_value"] = 0.0
 
     frame["_minute"] = action_minutes(frame)
-    frame["_is_shot"] = frame["type_name"].str.startswith("shot")
 
     # Shot membership is determined BEFORE the comparable-type filter, because `shot` is
     # itself comparable but we want the flag even for chains whose shot is the only surviving
     # action of its kind.
-    shot_chains = set(
-        map(tuple, frame.loc[frame["_is_shot"], ["game_id", "possession_id"]].to_numpy())
-    )
+    shot_chains = shot_possessions(frame)
 
     frame = frame[frame["type_name"].isin(PROVIDER_COMPARABLE_TYPES)].copy()
     if frame.empty:
@@ -157,6 +175,100 @@ def build_chain_table(
         table.groupby("season").size().to_dict(),
     )
     return table
+
+
+def shot_chain_involvement(
+    actions: pd.DataFrame,
+    group_keys: tuple[str, ...] = ("game_id", "team_id", "season", "provider"),
+) -> pd.DataFrame:
+    """Share of a group's shot-ending possessions that each player took at least one action in.
+
+    This is the one proposed metric that ranks a player on the *outcome* of the possessions they
+    appear in, rather than on pass volume or on receiving direction. That is the limitation it
+    exists to attack: with pass-only edges, centrality is a positional proxy -- midfielders are
+    31% of players with >=10 matches but **84% of the top 50 by `degree_total`**, and goalkeepers
+    take **0%** of the top 50 on all ten metrics. A forward with six touches and a share in three
+    of his team's shot chains is unrankable by every graph feature in this project. Involvement
+    counts possessions rather than actions, so one touch in a shot-ending chain scores exactly as
+    much as five, which is what keeps it from collapsing back into a volume measure.
+
+    **Nothing here is fitted, so there is no train-fold rule to obey.** Worth stating explicitly
+    because this sits next to features that do have one: `features/xthreat.fit_xthreat` learns a
+    value surface and must see training games only, and `xthreat.player_threat` inherits that
+    constraint through the values handed to it. `shot_involvement` is a count over whatever
+    actions it is given, so it can be computed on any fold, in any order, and the only thing the
+    input decides is which matches get summarised -- there is nothing for the test fold to shape.
+
+    **Possessions are not reassigned to an owning team.** `data.possession.reconstruct_possessions`
+    segments the ball, so a defensive touch by the other team falls inside the same
+    `possession_id`. Rather than pick a single owner, each player is counted within their own
+    group's rows and the denominator is the distinct shot-ending possessions appearing in those
+    same rows. This is a deliberate simplification, and it means a defender who touches the ball
+    during the *opponent's* shot-ending possession is credited with involvement inside his own
+    team's group. The metric therefore reads as "was part of the play that ended in a shot",
+    attacking or defending, and not as "helped create a shot"; separating the two needs the
+    possession's owning team, which this layer does not carry.
+
+    `group_keys` mirrors `xthreat.player_threat` and `models/role_gnn.engineer_node_features`.
+    Passing `window_index` among them requires the caller to have assigned that column onto
+    `actions` first -- it is a property of the windowed network tables, not of the action log --
+    and its absence raises here rather than silently returning full-match shares.
+
+    A group with no shot-ending possession gives every one of its players 0.0, not NaN: the same
+    convention as the `_safe_ratio` shares elsewhere, where "no evidence" reads as zero and a NaN
+    would drop the player out of any downstream sort.
+    """
+    keys = list(dict.fromkeys(group_keys))
+    columns = [*keys, "player_id", "shot_involvement"]
+
+    chains = shot_possessions(actions)
+    if not chains:
+        return pd.DataFrame(columns=columns)
+
+    chain_keys = list(dict.fromkeys([*keys, "game_id", "possession_id"]))
+    frame = actions[[*chain_keys, "player_id"]].copy()
+    frame = frame[frame["player_id"].notna()]
+    if frame.empty:
+        return pd.DataFrame(columns=columns)
+
+    frame["_in_shot_chain"] = [
+        (int(game_id), int(possession_id)) in chains
+        for game_id, possession_id in zip(frame["game_id"], frame["possession_id"])
+    ]
+    universe = frame[[*keys, "player_id"]].drop_duplicates()
+
+    involved = frame[frame["_in_shot_chain"]].drop_duplicates([*chain_keys, "player_id"])
+    per_player = (
+        involved.groupby([*keys, "player_id"], dropna=False)
+        .size()
+        .rename("_player_chains")
+        .reset_index()
+    )
+    per_group = (
+        involved.drop_duplicates(chain_keys)
+        .groupby(keys, dropna=False)
+        .size()
+        .rename("_group_chains")
+        .reset_index()
+    )
+
+    table = universe.merge(per_player, on=[*keys, "player_id"], how="left").merge(
+        per_group, on=keys, how="left"
+    )
+    table["_player_chains"] = table["_player_chains"].fillna(0.0)
+    table["_group_chains"] = table["_group_chains"].fillna(0.0)
+    table["shot_involvement"] = (
+        table["_player_chains"] / table["_group_chains"].replace(0.0, np.nan)
+    ).fillna(0.0)
+    table["player_id"] = table["player_id"].astype("int64")
+
+    log.info(
+        "shot involvement: %d players over %d groups | mean share %.3f",
+        len(table),
+        len(per_group),
+        table["shot_involvement"].mean(),
+    )
+    return table[columns].reset_index(drop=True)
 
 
 def chain_sequences(

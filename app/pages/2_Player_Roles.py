@@ -293,28 +293,51 @@ if missing:
         how="left",
     )
 
-controls = st.columns(4)
+# Three ways to rank the same graph, so the volume-proxy limitation is visible in the app
+# rather than only in the docs. "pass volume" is the classical baseline; "xT-weighted" reweights
+# every edge by the threat it created; "role-relative" z-scores within coarse role.
+BASIS_SUFFIX = {"pass volume": "", "xT-weighted": "_xt", "role-relative (z)": "_z"}
+THREAT_CHOICES = [m for m in ("xt_generated", "shot_involvement") if m in named.columns]
+METRIC_CHOICES = list(PLAYER_METRICS) + THREAT_CHOICES
+
+controls = st.columns(5)
 season_pick = controls[0].selectbox(
     "Season", sorted(named["season"].unique()), format_func=lambda s: SEASON_LABEL.get(s, s),
     key="lb_season",
 )
-metric_pick = controls[1].selectbox("Metric", list(PLAYER_METRICS), index=list(PLAYER_METRICS).index("pagerank"))
-role_pick = controls[2].multiselect("Role", ["GK", "DEF", "MID", "FWD"], default=["DEF", "MID", "FWD"])
-min_matches = controls[3].slider("Minimum matches", 1, 38, 10)
+metric_pick = controls[1].selectbox(
+    "Metric", METRIC_CHOICES, index=METRIC_CHOICES.index("pagerank")
+)
+basis_pick = controls[2].selectbox("Weighting", list(BASIS_SUFFIX), index=0)
+role_pick = controls[3].multiselect("Role", ["GK", "DEF", "MID", "FWD"], default=["DEF", "MID", "FWD"])
+min_matches = controls[4].slider("Minimum matches", 1, 38, 10)
+
+column = f"{metric_pick}{BASIS_SUFFIX[basis_pick]}"
+if column not in named.columns:
+    # `degree_*` count edges and ignore their weight, so they have no xT-weighted twin.
+    st.info(
+        f"`{metric_pick}` counts edges without regard to their weight, so it has no "
+        f"{basis_pick} version. Showing the raw metric."
+    )
+    column = metric_pick
 
 filtered = named[
     (named["season"] == season_pick)
     & (named["coarse_role"].isin(role_pick))
     & (named["n_matches"] >= min_matches)
 ]
-leaderboard = filtered.nlargest(20, metric_pick)[
-    ["player_name", "coarse_role", "n_matches", metric_pick, "betweenness", "strength_out"]
+extra = [c for c in ("betweenness", "strength_out") if c != column]
+leaderboard = filtered.nlargest(20, column)[
+    ["player_name", "coarse_role", "n_matches", column, *extra]
 ].round(4)
-leaderboard.columns = ["Player", "Role", "Matches", metric_pick, "betweenness", "strength_out"]
+leaderboard.columns = ["Player", "Role", "Matches", column, *extra]
 st.dataframe(leaderboard, hide_index=True, width="stretch")
 st.caption(
-    "Deep-lying playmakers dominating is the sanity check: Jorginho tops or near-tops both "
-    "seasons, alongside Pjanić, Hamšík, Biglia, Badelj, Magnanelli and Cigarini."
+    "Switch **Weighting** to see the limitation directly. On pass volume the list is almost all "
+    "midfielders — 84% of the top 50 by `degree_total`, against a 31% population share, and no "
+    "goalkeeper anywhere. xT-weighting does not fix that so much as invert it: `pagerank` swings "
+    "to 90% forwards. Role-relative z-scores make every role rankable, but that is largely true "
+    "by construction — z-scoring within role forces the mix toward the population."
 )
 
 # ============================================================== pitch by metric

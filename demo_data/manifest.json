@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-18T09:23:37+00:00",
-  "git_sha": "6a768f5",
+  "generated_at": "2026-08-20T08:12:54+00:00",
+  "git_sha": "bde30ef",
   "source": "/Volumes/T7/tacticalgraph/corpora/premier_league",
   "corpus": "premier_league",
   "corpus_label": "Premier League 2015/16",
@@ -38,14 +38,14 @@
     },
     "centrality_players.parquet": {
       "rows": 9267,
-      "columns": 15,
-      "size_kb": 430.6,
+      "columns": 24,
+      "size_kb": 1078.8,
       "source": "networks/centrality_players.parquet"
     },
     "centrality_player_season.parquet": {
       "rows": 419,
-      "columns": 16,
-      "size_kb": 50.4,
+      "columns": 44,
+      "size_kb": 173.6,
       "source": "networks/centrality_player_season.parquet"
     },
     "centrality_teams.parquet": {
@@ -102,6 +102,7 @@
     "module2_roles_matchweek_seed0.json",
     "module2_roles_matchweek_seed1.json",
     "module2_roles_matchweek_seed2.json",
+    "module2_volume_proxy_matchweek.json",
     "module3_ceiling.json",
     "module3_outcome_matchweek_seed0.json",
     "module3_outcome_matchweek_seed0_batch1.json",

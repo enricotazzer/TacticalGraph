@@ -19,7 +19,9 @@ from tacticalgraph.data.roles import (
     wyscout_to_coarse,
 )
 from tacticalgraph.graphs.passing_network import (
+    build_match_networks,
     build_team_network,
+    networks_to_frames,
     player_minutes_from_actions,
     window_bounds,
 )
@@ -436,3 +438,214 @@ def test_empty_edge_table_still_returns_direction_columns():
     for column in DIRECTION_FEATURES:
         assert column in out.columns
         assert (out[column] == 0.0).all()
+
+
+# --------------------------------------------------------------------------------------
+# xT-weighted edges, shot-chain involvement, and the leak guards on both
+# --------------------------------------------------------------------------------------
+
+
+def _threat_windows() -> tuple[pd.DataFrame, pd.Series]:
+    """Two windows of one team-match, with a shot in each.
+
+    `window_index` is assigned directly rather than derived from `window_bounds`, because the
+    real windows overlap on a 5-minute stride and an action belongs to up to three of them.
+    What is under test here is the *grouping* semantics -- whether a window's features are
+    computed from that window's actions alone -- and non-overlapping windows isolate that.
+    """
+    rows = [
+        # window 0: 10 -> 20 twice, and a shot ending possession 0
+        (0, 10, 20, "pass", 0),
+        (0, 10, 20, "pass", 0),
+        (0, 20, None, "shot", 0),
+        # window 1: the SAME 10 -> 20 lane again, and a shot ending possession 1. Reusing the
+        # lane is what makes the negative control below possible: with match-level keys the two
+        # windows collapse into one edge, so window 0's weight absorbs window 1's xT.
+        (1, 10, 20, "pass", 1),
+        (1, 30, None, "shot", 1),
+    ]
+    frame = pd.DataFrame(
+        rows, columns=["window_index", "player_id", "recipient_id", "type_name", "possession_id"]
+    )
+    frame["action_id"] = range(len(frame))
+    frame["game_id"] = 1
+    frame["team_id"] = 1
+    frame["season"] = "2015-2016"
+    frame["provider"] = "statsbomb"
+    frame["result_name"] = "success"
+    frame["recipient_confident"] = frame["recipient_id"].notna()
+    # Window 0's passes are worth ten times window 1's, so a match-level aggregate is obvious.
+    xt = pd.Series([0.10, 0.10, 0.0, 0.01, 0.0], index=frame.index)
+    return frame, xt
+
+
+def test_xt_edge_weights_reproduce_the_persisted_pass_counts():
+    """The guard that makes the join safe: same predicate, same grouping, same counts.
+
+    An xT weight on the wrong edge is invisible -- a plausible number in a plausible row -- so
+    the two edge tables have to agree by construction rather than by coincidence.
+    """
+    from tacticalgraph.features.xthreat import attach_xt_edge_weights
+
+    actions = fixture_actions()
+    _, edges = networks_to_frames(build_match_networks(actions))
+    xt = pd.Series(0.05, index=actions.index)
+
+    merged = attach_xt_edge_weights(edges, actions, xt)
+    assert len(merged) == len(edges)
+    assert (merged["weight"].to_numpy() == edges["weight"].to_numpy()).all()
+    # A flat 0.05 per pass makes xt_weight a direct multiple of the pass count.
+    assert merged["xt_weight"].to_numpy() == pytest.approx(0.05 * edges["weight"].to_numpy())
+
+
+def test_attach_xt_edge_weights_raises_when_the_edge_set_drifts():
+    """Both failure modes the assertion exists to catch, exercised separately."""
+    from tacticalgraph.features.xthreat import attach_xt_edge_weights
+
+    actions = fixture_actions()
+    _, edges = networks_to_frames(build_match_networks(actions))
+    xt = pd.Series(0.05, index=actions.index)
+
+    stray = edges.iloc[[0]].copy()
+    stray["target"] = 999
+    with pytest.raises(ValueError, match="no recomputed counterpart"):
+        attach_xt_edge_weights(pd.concat([edges, stray], ignore_index=True), actions, xt)
+
+    inflated = edges.copy()
+    inflated.loc[0, "weight"] = int(inflated.loc[0, "weight"]) + 1
+    with pytest.raises(ValueError, match="disagree on pass count"):
+        attach_xt_edge_weights(inflated, actions, xt)
+
+
+def test_xt_edge_weights_ignore_negative_deltas():
+    """A lane used only for back-passes is worth 0, not a negative number."""
+    from tacticalgraph.features.xthreat import attach_xt_edge_weights
+
+    actions = fixture_actions()
+    _, edges = networks_to_frames(build_match_networks(actions))
+    merged = attach_xt_edge_weights(edges, actions, pd.Series(-0.5, index=actions.index))
+    assert (merged["xt_weight"] == 0.0).all()
+
+
+def test_shot_chain_involvement_is_a_share_of_the_teams_shot_chains():
+    from tacticalgraph.features.chains import shot_chain_involvement
+
+    actions, _ = _threat_windows()
+    out = shot_chain_involvement(actions).set_index("player_id")["shot_involvement"]
+    # Both possessions end in a shot. 10 passes in both, 20 shoots in one, 30 shoots in the other.
+    assert out.loc[10] == pytest.approx(1.0)
+    assert out.loc[20] == pytest.approx(0.5)
+    assert out.loc[30] == pytest.approx(0.5)
+    assert out.between(0.0, 1.0).all()
+
+
+def test_threat_features_are_confined_to_their_window():
+    """Rebuild from truncated history and assert nothing changed.
+
+    The same shape as the state-table and node-feature truncation tests, applied to the two new
+    features before either reaches a model. `test_match_level_keys_leak_the_future_into_a_window`
+    below is its negative control.
+    """
+    from tacticalgraph.features.chains import shot_chain_involvement
+    from tacticalgraph.features.xthreat import xt_edge_weights
+    from tacticalgraph.models.role_gnn import WINDOW_KEYS
+
+    actions, xt = _threat_windows()
+    truncated = actions[actions["window_index"] <= 0]
+
+    def window_zero(frame: pd.DataFrame) -> pd.DataFrame:
+        columns = sorted(frame.columns)
+        return (
+            frame[frame["window_index"] == 0][columns]
+            .sort_values(columns)
+            .reset_index(drop=True)
+        )
+
+    pd.testing.assert_frame_equal(
+        window_zero(xt_edge_weights(actions, xt, group_keys=WINDOW_KEYS)),
+        window_zero(xt_edge_weights(truncated, xt.loc[truncated.index], group_keys=WINDOW_KEYS)),
+    )
+    pd.testing.assert_frame_equal(
+        window_zero(shot_chain_involvement(actions, group_keys=WINDOW_KEYS)),
+        window_zero(shot_chain_involvement(truncated, group_keys=WINDOW_KEYS)),
+    )
+
+    # And the value itself is the window's, not the match's: window 0 saw 0.20 of xT on the
+    # 10 -> 20 lane, and the 0.01 added in window 1 must not reach it.
+    windowed = xt_edge_weights(actions, xt, group_keys=WINDOW_KEYS)
+    assert windowed.set_index(["window_index", "source", "target"]).loc[
+        (0, 10, 20), "xt_weight"
+    ] == pytest.approx(0.20)
+
+
+def test_match_level_keys_leak_the_future_into_a_window():
+    """The negative control: the test above must be able to fail on the bug it guards.
+
+    With match-level keys on windowed actions, window 0's edge weights absorb window 1's xT --
+    exactly the leak that put 7 of 10 node features on full-match values in Module 3.
+    """
+    from tacticalgraph.features.xthreat import xt_edge_weights
+
+    actions, xt = _threat_windows()
+    truncated = actions[actions["window_index"] <= 0]
+
+    full = xt_edge_weights(actions, xt).set_index(["source", "target"])["xt_weight"]
+    trunc = xt_edge_weights(truncated, xt.loc[truncated.index]).set_index(
+        ["source", "target"]
+    )["xt_weight"]
+
+    # The 10 -> 20 lane is used in both windows. Grouped without `window_index` its weight is a
+    # whole-match total, so knowing only window 0 gives a strictly smaller number: the extra is
+    # xT that had not been generated yet.
+    assert full.loc[(10, 20)] == pytest.approx(0.21)
+    assert trunc.loc[(10, 20)] == pytest.approx(0.20)
+    assert full.loc[(10, 20)] > trunc.loc[(10, 20)]
+
+
+def test_threat_columns_are_absent_rather_than_zero_when_inputs_are_missing():
+    """A zero column would produce a plausible-looking ablation row that measures nothing."""
+    from tacticalgraph.models.role_gnn import THREAT_FEATURES, engineer_node_features
+
+    nodes, edges = _direction_fixture()
+    frame = engineer_node_features(nodes, edges)
+    for name in THREAT_FEATURES:
+        assert name not in frame.columns
+
+
+def test_threat_features_appear_when_their_inputs_are_supplied():
+    from tacticalgraph.models.role_gnn import THREAT_FEATURES, engineer_node_features
+
+    nodes, edges = _direction_fixture()
+    keys = {"game_id": 1, "team_id": 1, "season": "2015-2016", "provider": "statsbomb"}
+    edges = edges.assign(xt_weight=[1.0, 3.0, 0.0])
+    node_threat = pd.DataFrame([
+        {**keys, "player_id": 1, "xt_generated": 0.5, "shot_involvement": 0.0},
+        {**keys, "player_id": 2, "xt_generated": 0.5, "shot_involvement": 1.0},
+        {**keys, "player_id": 3, "xt_generated": 0.0, "shot_involvement": 1.0},
+    ])
+
+    frame = engineer_node_features(nodes, edges, node_threat=node_threat).set_index("player_id")
+    for name in THREAT_FEATURES:
+        assert name in frame.columns
+
+    # Shares of the team's xT-weighted strength, so each side sums to 1 across the network.
+    assert frame["xt_strength_out_norm"].sum() == pytest.approx(1.0)
+    assert frame["xt_strength_in_norm"].sum() == pytest.approx(1.0)
+    # The forward's only outgoing lane is the backward lay-off, worth 0 xT.
+    assert frame.loc[3, "xt_strength_out_norm"] == pytest.approx(0.0)
+    # ...but it receives the most valuable lane in the network.
+    assert frame.loc[3, "xt_strength_in_norm"] == pytest.approx(0.75)
+
+
+def test_node_threat_with_duplicate_rows_raises_rather_than_fanning_out():
+    """A duplicated (network, player) row would multiply nodes and go unnoticed downstream."""
+    from tacticalgraph.models.role_gnn import engineer_node_features
+
+    nodes, edges = _direction_fixture()
+    keys = {"game_id": 1, "team_id": 1, "season": "2015-2016", "provider": "statsbomb"}
+    node_threat = pd.DataFrame([
+        {**keys, "player_id": 1, "xt_generated": 0.5, "shot_involvement": 0.0},
+        {**keys, "player_id": 1, "xt_generated": 0.2, "shot_involvement": 0.0},
+    ])
+    with pytest.raises(ValueError, match="changed the row count"):
+        engineer_node_features(nodes, edges, node_threat=node_threat)

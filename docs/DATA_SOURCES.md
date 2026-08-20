@@ -153,21 +153,102 @@ within `coarse_role`. Top-50 composition on the same Premier League corpus, befo
 | Metric | Ranking | GK | DEF | MID | FWD |
 |---|---|---|---|---|---|
 | `degree_total` | raw | 0% | 8% | 84% | 8% |
-| `degree_total` | role-relative | 6% | 36% | 32% | 26% |
+| `degree_total` | role-relative | 6% | 34% | 32% | 28% |
 | `pagerank` | raw | 0% | 10% | 76% | 14% |
-| `pagerank` | role-relative | 10% | 34% | 30% | 26% |
+| `pagerank` | role-relative | 6% | 34% | 34% | 26% |
 | `betweenness` | raw | 0% | 30% | 66% | 4% |
-| `betweenness` | role-relative | 10% | 34% | 36% | 20% |
+| `betweenness` | role-relative | 2% | 34% | 42% | 22% |
 | `strength_out` | raw | 0% | 48% | 50% | 2% |
-| `strength_out` | role-relative | 6% | 42% | 28% | 24% |
-| *population* | — | 8% | 35% | 31% | 26% |
+| `strength_out` | role-relative | 6% | 34% | 32% | 28% |
+| *population* | — | 7.5% | 35.4% | 31.5% | 25.6% |
 
-A goalkeeper is rankable for the first time: Costel Pantilimon, `pagerank_z` = **+2.12**.
+A goalkeeper is rankable for the first time: Costel Pantilimon, `pagerank_z` = **+1.86**.
+
+These numbers replaced an earlier hand-run measurement when `role_relative_metrics` was finally
+wired into `scripts/run_centrality.py` — it had been implemented and unit-tested but reached no
+artifact, so the table here could not be reproduced from any code path and had drifted by a few
+points per cell (Pantilimon was recorded at +2.12). They now come from
+`module2_volume_proxy_<split>.json`, which the script writes on every run.
 
 **The post-z-score composition tracking the population is largely true by construction, and is
 not evidence the graph got better.** Z-scoring within role forces the top-50 mix toward the
 population mix; the agreement is mechanical, not a finding. What it actually buys is narrower:
 "unusually central *for a centre-back*" becomes expressible, and keepers and forwards get a
 ranking at all instead of none. It does **not** show that the graph measures tactical importance
-rather than volume. That claim needs the richer edge and threat features, which are still being
-built.
+rather than volume. That claim needs the richer edge and threat features, measured below.
+
+### The two remaining fixes, measured: xT-weighted edges and shot-chain involvement
+
+Both are now built and reproducible from `scripts/run_centrality.py`, which writes
+`module2_volume_proxy_<split>.json` next to the numbers below. Edge weights become the summed
+**positive** xT delta of the passes on that lane (`features/xthreat.xt_edge_weights`), and
+`shot_involvement` is a player's share of their team's shot-ending possessions
+(`features/chains.shot_chain_involvement`). Four targets were registered before running.
+
+**Target 1 — composition moves. MET, and it overshot.** Premier League top-50 share:
+
+| Metric | GK | DEF | MID | FWD |
+|---|---|---|---|---|
+| `pagerank` (volume) | 0% | 10% | **76%** | 14% |
+| `pagerank_xt` | 0% | 0% | 10% | **90%** |
+| `strength_out` (volume) | 0% | **48%** | 50% | 2% |
+| `strength_out_xt` | 0% | 44% | 32% | 24% |
+| `shot_involvement` | 0% | 14% | 48% | 38% |
+| `xt_generated` | 0% | 22% | 34% | 44% |
+| *population* | 8% | 35% | 31% | 26% |
+
+The registered bar was FWD ≥ 20% and MID ≤ 60% on `pagerank_xt`; it delivered 90% and 10%.
+That is not a correction, it is an inversion — a midfielder leaderboard traded for a forward
+one. Serie A replicates it at 92% FWD / 8% MID. Only `strength_out_xt` lands near the
+population. **Goalkeepers remain at 0% on every xT-weighted metric**, so the one role that was
+completely unrankable still is; role-relative z-scoring is the only thing that ranks them.
+
+**Target 2 — the metrics stop contradicting each other. FAILED.** Mean pairwise Spearman ρ
+across each family. The comparison is restricted to the **same seven weight-sensitive metrics**
+on both sides: `degree_total` is `degree_in + degree_out` by construction, so including the three
+degree metrics inflates whichever family holds them (it lifts the volume figure from +0.711 to
++0.725 on the Premier League). Both are shown so that inflation is visible rather than buried.
+
+| Corpus | volume (all 10) | volume (same 7) | xT-weighted (7) |
+|---|---|---|---|
+| Premier League | +0.725 | **+0.711** | +0.651 |
+| Serie A | +0.711 | **+0.694** | +0.528 |
+
+This was the load-bearing target, because unlike composition it is not moved mechanically by
+reweighting. It went the wrong way on both corpora, on the like-for-like comparison: xT-weighted
+metrics agree with each other *less* than the same metrics on pass-count weights. Reweighting the
+edges did not reveal a shared underlying construct; it added variance.
+
+**Target 3 — shot involvement is not a third volume proxy. FAILED on the primary corpus.**
+Spearman ρ against `degree_total` is **+0.710** (Premier League) and +0.653 (Serie A), against
+a registered bar of < 0.70. It must therefore be reported as substantially another volume
+measure. `xt_generated` is the one that clears it comfortably, at +0.457 and +0.498 — a player's
+share of the threat their team created is genuinely not the same thing as how often they touched
+the ball.
+
+**Target 4 — the threat features improve Module 2's role accuracy. FAILED (a null).** Added to
+the GNN as `all+threat` (22 features) against `all` (18), three seeds per split:
+
+| Corpus / split | `all` − `position` | `all+threat` − `position` | seed σ |
+|---|---|---|---|
+| Premier League, matchweek | +2.65 pp | +2.73 pp | ±0.25–0.34 |
+| Serie A, within-season | +2.53 pp | +2.56 pp | ±0.46–0.65 |
+| Serie A, cross-season | +5.74 pp | **+5.57 pp** | ±1.11–1.56 |
+
+The registered bars (> +2.65 and > +2.53) are cleared by **+0.08 pp and +0.03 pp**, against seed
+standard deviations three to twenty times larger, and the third split moves the other way. This is
+a null, and it is the expected one in hindsight: xT generated and shot involvement measure how much
+a player's actions were *worth*, and the 4-class GK/DEF/MID/FWD target is a question about *where
+they play*. `threat` on its own is the weakest feature set in the project (0.6215 on the Premier
+League, below `topology`'s 0.7538 and `direction`'s 0.7422). Value and role are close to
+orthogonal here.
+
+Worth recording as a reproducibility check: re-running `all` after all this work reproduces
+**+2.65 pp exactly**, to four decimal places on the mean.
+
+**What this establishes.** Reweighting the edges of a pass-only graph changes *which* position
+the leaderboard is biased toward without making it measure tactical importance. The limitation
+is not the weighting; it is that a graph whose only relation is "passed to" describes ball
+circulation, and ball circulation is positional. Fixing it needs a different relation — off-ball
+movement, defensive actions, or space occupied — and the first two are bounded by what event
+data records (median 3-4 out-of-possession actions per player) and the third needs tracking.

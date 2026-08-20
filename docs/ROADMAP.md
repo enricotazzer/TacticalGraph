@@ -125,19 +125,39 @@ Findings worth carrying forward:
   the first non-trivial contribution from graph structure in this project. The original conclusion
   ("graph topology adds almost nothing for role identification") was true of the features that
   existed, not of graphs.
+- **Module 2: pass *value* adds nothing, and that is informative.** The follow-up to direction was
+  four threat features — `xt_generated`, `shot_involvement`, and in/out strength on xT-weighted
+  edges. `all+threat` beats `all` by **+0.08 pp** (Premier League) and **+0.03 pp**
+  (within-season), against seed spreads of 0.25–0.65 pp, and is **worse** on cross-season. A null.
+  `threat` alone is the weakest feature set in the project (0.6215, below `topology`'s 0.7538).
+  The reading: direction helped because it is *geometric* and the 4-class target is a question
+  about pitch location; value is orthogonal to that. The features stay because the centrality
+  leaderboard needs them, not because the classifier does — see the graph-gaps section below for
+  what they did and did not fix there.
 - **Module 4's set-piece rule still over-segments.** Chains restart on every set piece, which
   splits one phase of play into fragments. A possession that restarts on a throw-in is often
   the same attack.
 
 ## Known gaps in the graph representation
 
-Raised during review and not yet built. These are real limitations, not speculation — the
-measurements behind them are in [DATA_SOURCES.md](DATA_SOURCES.md).
+Raised during review. Item 1's four candidate fixes are now all built and measured; items 2-4 are
+not. These are real limitations, not speculation — the measurements behind them are in
+[DATA_SOURCES.md](DATA_SOURCES.md).
 
-1. **Pass-only edges make centrality a volume proxy — partly addressed.** Midfielders take 84% of
-   the top 50 by degree against a 31-33% population share; goalkeepers take 0% on all ten metrics.
-   The limitation replicates on the single-provider Premier League corpus, so it is not a
-   harmonisation artefact.
+1. **Pass-only edges make centrality a volume proxy — all four fixes built, and the limitation
+   stands.** Every candidate has now been tried: pass direction, role-relative z-scoring,
+   xT-weighted edges and shot-chain involvement. Direction is a real win for the *classifier*;
+   none of the four makes the *leaderboard* measure tactical importance rather than volume.
+   Reweighting changes which position is favoured — `pagerank_xt` swaps a 76% midfielder top-50
+   for a 90% forward one — and z-scoring evens the mix by construction. The conclusion to carry
+   forward is that this is not a weighting problem: a graph whose only relation is "passed to"
+   describes ball circulation, and ball circulation is positional. A different *relation* is
+   needed, and the two candidates for it (defensive actions, off-ball movement) are bounded by
+   what event data records.
+
+   The baseline it is all measured against: midfielders take **84% of the top 50 by degree**
+   against a 31-33% population share, and goalkeepers take 0% on all ten metrics. It replicates on
+   the single-provider Premier League corpus, so it is not a harmonisation artefact. Per fix:
    - **Pass progressiveness — BUILT, and it is the biggest win here.** `DIRECTION_FEATURES` in
      `models/role_gnn.py` derives progression made/received, mean length and progressive share
      from `mean_dx`/`mean_length`, which had been on the edge table since Module 1 and unused.
@@ -164,14 +184,28 @@ measurements behind them are in [DATA_SOURCES.md](DATA_SOURCES.md).
      construction** — z-scoring within role forces the composition toward the population — so it
      makes "central for a centre-back" expressible rather than proving the metric measures
      tactical importance.
-   - **xT-weighted edges** — still open. `weight = Σ xT delta` instead of pass count. The shared
-     fit now lives in `features/xthreat.py` (`fit_xthreat`, train-fold only), but the persisted
-     edge tables carry no per-edge xT, so this needs either re-deriving edges from actions at
-     module time or a split-dependent artifact. Measure the cost before committing.
-   - **Shot-chain involvement** — still open. Participation rate in possessions ending in a shot,
-     via `possession_id`. The one metric that would rank forwards on *outcome* rather than on
-     receiving direction. `features/xthreat.player_threat` is the template for how to compute a
-     per-player share post-split.
+   - **xT-weighted edges — BUILT, and the honest verdict is that they do not fix this.**
+     `features/xthreat.xt_edge_weights` sets `weight = Σ positive xT delta`. The cost worry was
+     unfounded: nothing has to be rebuilt and no split-dependent artifact is needed, because the
+     persisted edge grouping is reproducible from the actions and the result **left-joins** onto
+     `full_edges.parquet`. `attach_xt_edge_weights` asserts the recomputed pass count equals the
+     persisted `weight` exactly, which is what makes the join safe — a misattached xT value is
+     otherwise invisible. Total cost on the Premier League corpus: **6.7 s**, running the whole
+     centrality pipeline twice.
+     The result: `pagerank_xt` moves the top-50 from 76% MID to **90% FWD** (92% on Serie A).
+     That inverts the bias rather than removing it. Two pre-registered targets failed — the
+     xT-weighted metrics **agree with each other less** than the same seven metrics on pass-count
+     weights (0.65 vs 0.71 on the Premier League, 0.53 vs 0.70 on Serie A), and goalkeepers stay at 0% on every one of them.
+     Only `strength_out_xt` lands near the population share. Full tables in
+     [DATA_SOURCES.md](DATA_SOURCES.md).
+   - **Shot-chain involvement — BUILT, and it is substantially another volume proxy.**
+     `features/chains.shot_chain_involvement` gives a player's share of their team's shot-ending
+     possessions, via `possession_id`. It is **split-free** — nothing is fitted — unlike every
+     other feature in this group. It does rank forwards (38% of the top 50 against 26% of the
+     population, where `strength_out` gave them 2%), but it correlates **+0.710** with
+     `degree_total` on the Premier League against a pre-registered bar of < 0.70, so it is
+     largely measuring involvement again. `xt_generated` is the feature that clears that bar
+     comfortably (+0.457).
 2. **Verticality as a team style feature.** Validated but not yet a model input: mean pass
    verticality ranks Serie A teams sensibly (Napoli and Juventus most patient in both seasons;
    Sassuolo and Crotone most vertical) and survives the provider change at Spearman ρ = 0.509
